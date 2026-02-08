@@ -70,7 +70,7 @@ export async function removeTorrent(infoHash: string): Promise<void> {
 	const torrent = await torrentClient.get(infoHash);
 	if (!torrent) return;
 	return new Promise((resolve) => {
-		torrentClient.remove(infoHash, undefined, () => {
+		torrent.destroy(undefined, () => {
 			unregisterTorrent(torrent);
 			resolve();
 		});

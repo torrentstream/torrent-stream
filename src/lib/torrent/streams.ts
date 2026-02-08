@@ -12,6 +12,7 @@ declare global {
 				{
 					streams: Map<string, TorrentStream>;
 					speeds: LRU<number, { date: Date; upload: number; download: number }>;
+					timeout?: NodeJS.Timeout;
 				}
 		  >
 		| undefined;
@@ -23,6 +24,7 @@ if (!global.torrentDataMap) {
 		{
 			streams: Map<string, TorrentStream>;
 			speeds: LRU<number, { date: Date; upload: number; download: number }>;
+			timeout?: NodeJS.Timeout;
 		}
 	>();
 
@@ -76,6 +78,12 @@ export function registerTorrent(torrent: Torrent) {
 }
 
 export function unregisterTorrent(torrent: Torrent) {
+	const data = torrentData.get(torrent.infoHash);
+	if (!data) return;
+	clearTimeout(data.timeout);
+	data.streams.forEach((stream) => {
+		clearTimeout(stream.timeout);
+	});
 	torrentData.delete(torrent.infoHash);
 	logger.info(`Torrent removed: ${torrent.name} (${torrent.infoHash})`);
 }
@@ -105,7 +113,8 @@ export function registerStream(
 }
 
 export function unregisterStream(id: string, torrent: Torrent) {
-	if (!torrentData.get(torrent.infoHash)?.streams.delete(id)) {
+	const data = torrentData.get(torrent.infoHash);
+	if (!data || !data.streams.delete(id)) {
 		return;
 	}
 
@@ -115,7 +124,7 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	store.refreshCapacity();
 
 	if (getStreams(torrent).length === 0) {
-		setTimeout(() => {
+		data.timeout = setTimeout(() => {
 			if (getStreams(torrent).length > 0) return;
 			torrent.destroy(undefined, () => {
 				unregisterTorrent(torrent);
