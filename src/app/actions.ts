@@ -1,6 +1,7 @@
 "use server";
 
 import { torrentClient } from "@/lib/torrent/clients";
+import { unregisterTorrent } from "@/lib/torrent/streams";
 import { TorrentInfo } from "@/lib/torrent/types";
 
 export interface TorrentStats {
@@ -63,4 +64,15 @@ export async function getTorrents(): Promise<TorrentStats[]> {
 					.sort((a, b) => a.path.localeCompare(b.path)),
 			};
 		});
+}
+
+export async function removeTorrent(infoHash: string): Promise<void> {
+	const torrent = await torrentClient.get(infoHash);
+	if (!torrent) return;
+	return new Promise((resolve) => {
+		torrentClient.remove(infoHash, undefined, () => {
+			unregisterTorrent(torrent);
+			resolve();
+		});
+	});
 }

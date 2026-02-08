@@ -1,25 +1,45 @@
 "use client";
 
 import { useAutoAnimate } from "@formkit/auto-animate/react";
-import { Download, Eye, File, Film, Subtitles, Upload } from "lucide-react";
+import {
+	Download,
+	Eye,
+	File,
+	Film,
+	Subtitles,
+	Trash2,
+	Upload,
+} from "lucide-react";
+import { useState } from "react";
 import { Area, AreaChart } from "recharts";
 import useSWR from "swr";
-import { getTorrents, type TorrentStats } from "@/app/actions";
+import { getTorrents, removeTorrent, type TorrentStats } from "@/app/actions";
 import {
 	type ChartConfig,
 	ChartContainer,
 	ChartTooltip,
 	ChartTooltipContent,
 } from "@/components/ui/chart";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
+} from "@/components/ui/dialog";
 import { getReadableSize } from "@/lib/file";
 import { FlipNumber } from "./flip-number";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 
 export function TorrentList({ torrents }: { torrents: TorrentStats[] }) {
 	const [cardsParent] = useAutoAnimate();
 
-	const { data } = useSWR("torrents", getTorrents, {
+	const { data, mutate } = useSWR("torrents", getTorrents, {
 		fallbackData: torrents,
 		refreshInterval: 1000,
 	});
@@ -35,17 +55,45 @@ export function TorrentList({ torrents }: { torrents: TorrentStats[] }) {
 				</div>
 			)}
 			{data.map((torrent) => (
-				<TorrentCard key={torrent.infoHash} torrent={torrent} />
+				<TorrentCard
+					key={torrent.infoHash}
+					torrent={torrent}
+					onRemoved={async () => {
+						await mutate();
+					}}
+				/>
 			))}
 		</div>
 	);
 }
 
-function TorrentCard({ torrent }: { torrent: TorrentStats }) {
+function TorrentCard({
+	torrent,
+	onRemoved,
+}: {
+	torrent: TorrentStats;
+	onRemoved: () => Promise<void>;
+}) {
 	const [filesParent] = useAutoAnimate();
 	const [badgeParent] = useAutoAnimate();
+	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+	const [isRemoving, setIsRemoving] = useState(false);
+
+	const displayName = torrent.name.split(".").join(".\u200B");
 
 	const files = torrent.files.filter((file) => file.streams);
+
+	const handleRemove = async () => {
+		if (isRemoving) return;
+		setIsRemoving(true);
+		setRemoveDialogOpen(false);
+		try {
+			await removeTorrent(torrent.infoHash);
+			await onRemoved();
+		} finally {
+			setIsRemoving(false);
+		}
+	};
 
 	const interval = 5;
 	const maxPoints = 60;
@@ -68,15 +116,50 @@ function TorrentCard({ torrent }: { torrent: TorrentStats }) {
 		<Card>
 			<CardContent className="flex flex-col gap-2">
 				<div className="flex flex-col-reverse md:flex-row items-start md:items-center justify-between gap-2">
-					<div className="md:text-lg font-bold">
-						{torrent.name.split(".").join(".\u200B")}
-					</div>
-					<div ref={badgeParent}>
+					<div className="md:text-lg font-bold">{displayName}</div>
+					<div ref={badgeParent} className="flex items-center gap-2">
 						{torrent.streams ? (
 							<Badge className="bg-green-800 text-white">Streaming</Badge>
 						) : (
 							<Badge>Idle</Badge>
 						)}
+						<Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+							<DialogTrigger
+								render={
+									<Button
+										size="xs"
+										variant="destructive"
+										className="h-5 rounded-full px-2 text-xs font-medium gap-1"
+										disabled={isRemoving}
+									/>
+								}
+							>
+								<Trash2 />
+								Remove
+							</DialogTrigger>
+							<DialogContent>
+								<DialogHeader>
+									<DialogTitle>Remove torrent?</DialogTitle>
+									<DialogDescription>
+										Are you sure you want to remove{" "}
+										<span className="font-bold">{displayName}</span> from the
+										torrent client?
+									</DialogDescription>
+								</DialogHeader>
+								<DialogFooter>
+									<DialogClose render={<Button variant="outline" />}>
+										No
+									</DialogClose>
+									<Button
+										variant="destructive"
+										onClick={handleRemove}
+										disabled={isRemoving}
+									>
+										Yes
+									</Button>
+								</DialogFooter>
+							</DialogContent>
+						</Dialog>
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-2">

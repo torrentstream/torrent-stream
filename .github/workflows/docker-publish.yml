@@ -31,9 +31,9 @@ jobs:
         with:
           images: ${{ vars.DOCKER_IMAGE }}
           tags: |
+            type=sha,format=short,prefix=
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=preview,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,format=short,prefix=
 
       - name: Build and push
         uses: docker/build-push-action@v6
