@@ -3,7 +3,7 @@
 	"scripts": {
 		"dev": "tsx watch --no-deprecation src/server.ts",
 		"build": "next build && tsc --project tsconfig.server.json",
-		"start": "cross-env NODE_ENV=production node --no-deprecation dist/server.js",
+		"start": "cross-env NODE_ENV=production node --no-deprecation --expose-gc dist/server.js",
 		"lint": "biome check"
 	},
 	"dependencies": {

@@ -86,6 +86,7 @@ export function unregisterTorrent(torrent: Torrent) {
 	});
 	torrentData.delete(torrent.infoHash);
 	logger.info(`Torrent removed: ${torrent.name} (${torrent.infoHash})`);
+	runGarbageCollection("A torrent was removed");
 }
 
 export function registerStream(
@@ -151,4 +152,10 @@ export function getHistoricalSpeeds(torrent: Torrent | string) {
 			}))
 			.toArray() ?? []
 	);
+}
+
+function runGarbageCollection(reason: string) {
+	if (typeof global.gc !== "function") return;
+	global.gc();
+	logger.debug(`GC triggered: ${reason}`);
 }
