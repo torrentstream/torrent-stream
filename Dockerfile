@@ -46,7 +46,9 @@ FROM node:${NODE_VERSION}-slim AS runner
 
 # Install Supervisor
 RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
-COPY supervisord.conf /etc/supervisord.conf
+COPY supervisord.conf /etc/supervisord.conf.template
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Copy Caddy Binary
 COPY --from=caddy-image /usr/bin/caddy /usr/bin/caddy
@@ -64,4 +66,4 @@ COPY --from=next-builder /app/dist ./dist
 
 # Expose and Run
 EXPOSE 3000 443
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

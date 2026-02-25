@@ -65,9 +65,9 @@ The following env vars can be used to configure the application:
 | --- | --- | --- |
 | PORT | The webserver's HTTP listen port. | 3000 |
 | LOG_LEVEL | Desired log level. Possible values: fatal, error, warn, info, debug, trace, silent. | info |
-| DOMAIN_NAME | DuckDNS domain (FQDN) for Caddy TLS. | your-subdomain.duckdns.org |
+| DOMAIN_NAME | DuckDNS domain (FQDN) for Caddy TLS. | - |
 | DUCKDNS_TOKEN | DuckDNS token for DNS-01 TLS. | - |
-| ENCRYPTION_KEY | Key used for encrypting stream URLs in case they contain sensitive information. Use a long random string. | your_random_string |
+| ENCRYPTION_KEY | Key used for encrypting stream URLs in case they contain sensitive information. Use a long random string. | - |
 | STREAM_MEMORY_LIMIT | Stream memory budget in bytes. Increase or decrease depending on available RAM and how many parallel streams you need. | 134217728 |
 | TORRENT_ADD_TIMEOUT | Cancel adding torrent to the torrent client if no data is received in this many milliseconds. | 5000 |
 | TORRENT_IDLE_TIMEOUT | Consider a torrent idle after no streams pulled any data in this many milliseconds. | 60000 |
