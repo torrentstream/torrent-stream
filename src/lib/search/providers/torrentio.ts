@@ -1,11 +1,11 @@
-import { config } from "../../config";
-import { logger } from "../../logger";
+import { config } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import {
 	type StremioStream,
 	TorrentCategory,
 	TorrentSearchProvider,
 	TorrentSearchResult,
-} from "../types";
+} from "@/lib/search/types";
 
 const torrentioProviders = [
 	"yts",

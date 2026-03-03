@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { tryParseEnum } from "../../../../../lib/enum";
-import { isImdbId } from "../../../../../lib/imdb";
-import { getStremioStreams } from "../../../../../lib/search";
-import { TorrentCategory } from "../../../../../lib/search/types";
+import { tryParseEnum } from "@/lib/enum";
+import { isImdbId } from "@/lib/imdb";
+import { getStremioStreams } from "@/lib/search";
+import { TorrentCategory } from "@/lib/search/types";
 
 export async function GET(
 	request: NextRequest,

@@ -18,21 +18,26 @@ export function getStreamingMimeType(name: string) {
 }
 
 const unitMap = { B: 0, KB: 1, MB: 2, GB: 3, TB: 4, PB: 5 };
+
 export function getReadableSize(
 	size: number,
 	minUnit: keyof typeof unitMap = "KB",
 ) {
-	if (size === 0) return "0.00 B";
+	if (size === 0) return "0 B";
 	var e = Math.floor(Math.log(size) / Math.log(1024));
 	if (minUnit !== undefined) {
 		e = Math.max(e, unitMap[minUnit]);
 	}
-	return `${(size / 1024 ** e).toFixed(2)} ${" KMGTP".charAt(e)}B`.replace(
+	return `${formatMax2Decimals(size / 1024 ** e)} ${" KMGTP".charAt(e)}B`.replace(
 		"  ",
 		" ",
 	);
 }
 
 export function getReadableProgress(progress: number) {
-	return `${(progress * 100).toFixed(2)}%`;
+	return `${formatMax2Decimals(progress * 100)}%`;
+}
+
+function formatMax2Decimals(value: number) {
+	return value.toFixed(2).replace(/\.?0+$/, "");
 }

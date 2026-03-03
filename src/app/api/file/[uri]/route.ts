@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { config } from "@/lib/config";
-import { decryptText } from "../../../../lib/encryption";
-import { getStreamingMimeType } from "../../../../lib/file";
-import { getOrAddTorrent, getReadableStream } from "../../../../lib/torrent";
+import { config, TorrentStorageMode } from "@/lib/config";
+import { decryptText } from "@/lib/encryption";
+import { getStreamingMimeType } from "@/lib/file";
+import { getOrAddTorrent, getReadableStream } from "@/lib/torrent";
 
 export async function GET(
 	request: NextRequest,
@@ -64,15 +64,19 @@ export async function GET(
 		end = file.length - 1;
 	}
 
-	const startByte = file.offset + start;
-	const startPiece = Math.floor(startByte / torrent.pieceLength);
-	const nextPieceStartByte = (startPiece + 1) * torrent.pieceLength;
-	const bytesUntilNextPiece = nextPieceStartByte - startByte;
-	const buffer = Math.floor(config.streamMemoryLimit / torrent.pieceLength / 2);
-	const maxLength = bytesUntilNextPiece + (buffer - 1) * torrent.pieceLength;
+	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
+		const startByte = file.offset + start;
+		const startPiece = Math.floor(startByte / torrent.pieceLength);
+		const nextPieceStartByte = (startPiece + 1) * torrent.pieceLength;
+		const bytesUntilNextPiece = nextPieceStartByte - startByte;
+		const buffer = Math.floor(
+			config.streamMemoryLimit / torrent.pieceLength / 2,
+		);
+		const maxLength = bytesUntilNextPiece + (buffer - 1) * torrent.pieceLength;
 
-	if (end - start >= maxLength) {
-		end = Math.min(start + maxLength - 1, file.length - 1);
+		if (end - start >= maxLength) {
+			end = Math.min(start + maxLength - 1, file.length - 1);
+		}
 	}
 
 	if (request.signal.aborted) {

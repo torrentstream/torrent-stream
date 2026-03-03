@@ -1,7 +1,7 @@
 import MemoryChunkStore from "memory-chunk-store";
 import type { FileIterator, Torrent, TorrentFile } from "webtorrent";
-import { config } from "../config";
-import { logger } from "../logger";
+import { config, TorrentStorageMode } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import { infoClient, torrentClient } from "./clients";
 import { registerStream, registerTorrent, type TorrentStream } from "./streams";
 import { TorrentInfo } from "./types";
@@ -34,7 +34,9 @@ export function getOrAddTorrent(uri: string) {
 		const torrent = torrentClient.add(
 			uri,
 			{
-				store: MemoryChunkStore,
+				...(config.torrentStorageMode === TorrentStorageMode.Memory
+					? { store: MemoryChunkStore }
+					: { path: config.torrentStoragePath }),
 				destroyStoreOnDestroy: true,
 				deselect: true,
 			},

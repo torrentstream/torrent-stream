@@ -1,12 +1,12 @@
 import type { Torrent, TorrentFile } from "webtorrent";
-import { getEpisodeNumber } from "../episode";
+import { getEpisodeNumber } from "@/lib/episode";
 import {
 	getReadableProgress,
 	getReadableSize,
 	isSubtitleFile,
 	isVideoFile,
-} from "../file";
-import { getFormats, type TorrentFormat } from "../format";
+} from "@/lib/file";
+import { getFormats, type TorrentFormat } from "@/lib/format";
 import { getHistoricalSpeeds, getStreams } from "./streams";
 
 export class TorrentInfo {

@@ -1,7 +1,7 @@
 import type { Torrent, TorrentFile } from "webtorrent";
-import { config } from "../config";
-import { logger } from "../logger";
-import { LRU } from "../lru";
+import { config, TorrentStorageMode } from "@/lib/config";
+import { logger } from "@/lib/logger";
+import { LRU } from "@/lib/lru";
 import { torrentClient } from "./clients";
 import { TorrentStreamChunkStore } from "./store";
 
@@ -67,7 +67,9 @@ export class TorrentStream {
 
 export function registerTorrent(torrent: Torrent) {
 	if (torrentData.has(torrent.infoHash)) return;
-	torrent.store = new TorrentStreamChunkStore(torrent);
+	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
+		torrent.store = new TorrentStreamChunkStore(torrent);
+	}
 	torrentData.set(torrent.infoHash, {
 		streams: new Map<string, TorrentStream>(),
 		speeds: new LRU<number, { date: Date; upload: number; download: number }>(
@@ -104,8 +106,10 @@ export function registerStream(
 
 		logger.info(`Stream started: ${torrent.name} (${id})`);
 
-		const store = torrent.store as TorrentStreamChunkStore;
-		store.refreshCapacity();
+		if (config.torrentStorageMode === TorrentStorageMode.Memory) {
+			const store = torrent.store as TorrentStreamChunkStore;
+			store.refreshCapacity();
+		}
 	}
 
 	stream.files.set(file.path, file);
@@ -121,8 +125,10 @@ export function unregisterStream(id: string, torrent: Torrent) {
 
 	logger.info(`Stream ended: ${torrent.name} (${id})`);
 
-	const store = torrent.store as TorrentStreamChunkStore;
-	store.refreshCapacity();
+	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
+		const store = torrent.store as TorrentStreamChunkStore;
+		store.refreshCapacity();
+	}
 
 	if (getStreams(torrent).length === 0) {
 		data.timeout = setTimeout(() => {

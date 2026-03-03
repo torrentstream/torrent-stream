@@ -1,7 +1,7 @@
 import type { ChunkStore, Torrent } from "webtorrent";
-import { config } from "../config";
-import { logger } from "../logger";
-import { LRU } from "../lru";
+import { config } from "@/lib/config";
+import { logger } from "@/lib/logger";
+import { LRU } from "@/lib/lru";
 import { getStreams } from "./streams";
 
 export class TorrentStreamChunkStore implements ChunkStore {

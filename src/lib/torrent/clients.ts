@@ -1,6 +1,7 @@
 import type { Instance } from "webtorrent";
 import WebTorrent from "webtorrent";
-import { logger } from "../logger";
+import { config } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 declare global {
 	var torrentClientInstance: Instance | undefined;
@@ -8,7 +9,10 @@ declare global {
 }
 
 if (!global.torrentClientInstance) {
-	global.torrentClientInstance = new WebTorrent();
+	global.torrentClientInstance = new WebTorrent({
+		downloadLimit: config.torrentDownloadLimit,
+		uploadLimit: config.torrentUploadLimit,
+	});
 	global.torrentClientInstance.on("error", (error) => {
 		if (
 			error instanceof Error &&

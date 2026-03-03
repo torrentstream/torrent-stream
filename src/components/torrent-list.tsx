@@ -6,6 +6,8 @@ import {
 	Eye,
 	File,
 	Film,
+	HardDriveDownload,
+	HardDriveUpload,
 	Subtitles,
 	Trash2,
 	Upload,
@@ -36,7 +38,13 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 
-export function TorrentList({ torrents }: { torrents: TorrentStats[] }) {
+export function TorrentList({
+	torrents,
+	showProgress,
+}: {
+	torrents: TorrentStats[];
+	showProgress?: boolean;
+}) {
 	const [cardsParent] = useAutoAnimate();
 
 	const { data, mutate } = useSWR("torrents", getTorrents, {
@@ -58,6 +66,7 @@ export function TorrentList({ torrents }: { torrents: TorrentStats[] }) {
 				<TorrentCard
 					key={torrent.infoHash}
 					torrent={torrent}
+					showProgress={showProgress}
 					onRemoved={async () => {
 						await mutate();
 					}}
@@ -69,9 +78,11 @@ export function TorrentList({ torrents }: { torrents: TorrentStats[] }) {
 
 function TorrentCard({
 	torrent,
+	showProgress,
 	onRemoved,
 }: {
 	torrent: TorrentStats;
+	showProgress?: boolean;
 	onRemoved: () => Promise<void>;
 }) {
 	const [filesParent] = useAutoAnimate();
@@ -171,6 +182,18 @@ function TorrentCard({
 						<Upload size={14} />
 						<FlipNumber>{torrent.uploadSpeed}</FlipNumber>
 					</div>
+					{showProgress && (
+						<>
+							<div className="flex items-center gap-2 text-muted-foreground">
+								<HardDriveDownload size={14} />
+								<FlipNumber>{torrent.downloaded}</FlipNumber>
+							</div>
+							<div className="flex items-center gap-2 text-muted-foreground">
+								<HardDriveUpload size={14} />
+								<FlipNumber>{torrent.uploaded}</FlipNumber>
+							</div>
+						</>
+					)}
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<Eye size={14} />
 						<FlipNumber>{torrent.streams}</FlipNumber>
@@ -262,7 +285,14 @@ function TorrentCard({
 									<File size={14} />
 								)}
 							</div>
-							{file.name.split(".").join(".\u200B")} ({file.size})
+							<span>
+								{file.name.split(".").join(".\u200B")} ({file.size})
+							</span>
+							{showProgress && (
+								<Badge className="bg-white/20 text-white">
+									<FlipNumber>{file.progress}</FlipNumber>
+								</Badge>
+							)}
 						</div>
 					))}
 				</div>

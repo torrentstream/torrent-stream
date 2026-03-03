@@ -1,11 +1,11 @@
 import { randomBytes } from "node:crypto";
-import { config } from "../config";
-import { encryptText } from "../encryption";
-import { getReadableSize } from "../file";
-import { getFormats, TorrentFormat } from "../format";
-import { logger } from "../logger";
-import { getTorrentInfo } from "../torrent";
-import type { TorrentInfo } from "../torrent/types";
+import { config } from "@/lib/config";
+import { encryptText } from "@/lib/encryption";
+import { getReadableSize } from "@/lib/file";
+import { getFormats, TorrentFormat } from "@/lib/format";
+import { logger } from "@/lib/logger";
+import { getTorrentInfo } from "@/lib/torrent";
+import type { TorrentInfo } from "@/lib/torrent/types";
 import { InsaneProvider } from "./providers/insane";
 import { NcoreProvider } from "./providers/ncore";
 import { TorrentioProvider } from "./providers/torrentio";

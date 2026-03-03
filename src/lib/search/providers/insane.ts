@@ -1,13 +1,13 @@
 import * as cheerio from "cheerio";
 import makeFetchCookie from "fetch-cookie";
-import { config } from "../../config";
-import { isImdbId } from "../../imdb";
-import { logger } from "../../logger";
+import { config } from "@/lib/config";
+import { isImdbId } from "@/lib/imdb";
+import { logger } from "@/lib/logger";
 import {
 	TorrentCategory,
 	TorrentSearchProvider,
 	TorrentSearchResult,
-} from "../types";
+} from "@/lib/search/types";
 
 enum InsaneCategory {
 	Film_Hun_SD = 41,

@@ -1,8 +1,8 @@
-import { config } from "../config";
-import { getEpisodeNumber } from "../episode";
-import { getReadableSize } from "../file";
-import { getFormats } from "../format";
-import { getLanguage } from "../language";
+import { config } from "@/lib/config";
+import { getEpisodeNumber } from "@/lib/episode";
+import { getReadableSize } from "@/lib/file";
+import { getFormats } from "@/lib/format";
+import { getLanguage } from "@/lib/language";
 
 export enum TorrentCategory {
 	Movie = "movie",
