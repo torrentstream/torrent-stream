@@ -8,6 +8,8 @@ import { TorrentInfo } from "./types";
 
 export function getTorrentInfo(uri: string) {
 	return new Promise<TorrentInfo | undefined>((resolve) => {
+		let completed = false;
+
 		const torrent = infoClient.add(
 			uri,
 			{
@@ -15,6 +17,8 @@ export function getTorrentInfo(uri: string) {
 				destroyStoreOnDestroy: true,
 			},
 			(torrent) => {
+				if (completed) return;
+				completed = true;
 				clearTimeout(timeout);
 				const info = new TorrentInfo(torrent);
 				torrent.destroy();
@@ -23,6 +27,8 @@ export function getTorrentInfo(uri: string) {
 		);
 
 		const timeout = setTimeout(() => {
+			if (completed) return;
+			completed = true;
 			torrent.destroy();
 			resolve(undefined);
 		}, config.torrentAddTimeout);
@@ -31,6 +37,8 @@ export function getTorrentInfo(uri: string) {
 
 export function getOrAddTorrent(uri: string) {
 	return new Promise<Torrent | undefined>((resolve) => {
+		let completed = false;
+
 		const torrent = torrentClient.add(
 			uri,
 			{
@@ -41,6 +49,8 @@ export function getOrAddTorrent(uri: string) {
 				deselect: true,
 			},
 			(torrent) => {
+				if (completed) return;
+				completed = true;
 				clearTimeout(timeout);
 				registerTorrent(torrent);
 				resolve(torrent);
@@ -48,6 +58,8 @@ export function getOrAddTorrent(uri: string) {
 		);
 
 		const timeout = setTimeout(() => {
+			if (completed) return;
+			completed = true;
 			torrent.destroy();
 			resolve(undefined);
 		}, config.torrentAddTimeout);
@@ -69,6 +81,7 @@ export function getReadableStream(
 		start() {
 			iterator = file[Symbol.asyncIterator]({ start, end });
 			stream = registerStream(id, torrent, file);
+			stream.refreshTimeout();
 		},
 		async pull(controller) {
 			try {

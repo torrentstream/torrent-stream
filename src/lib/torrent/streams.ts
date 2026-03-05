@@ -101,6 +101,9 @@ export function registerStream(
 
 	let stream = data.streams.get(id);
 	if (!stream) {
+		clearTimeout(data.timeout);
+		data.timeout = undefined;
+
 		stream = new TorrentStream(id, torrent);
 		data.streams.set(id, stream);
 
@@ -119,9 +122,13 @@ export function registerStream(
 
 export function unregisterStream(id: string, torrent: Torrent) {
 	const data = torrentData.get(torrent.infoHash);
-	if (!data || !data.streams.delete(id)) {
-		return;
-	}
+	if (!data) return;
+
+	const stream = data.streams.get(id);
+	if (!stream) return;
+
+	clearTimeout(stream.timeout);
+	data.streams.delete(id);
 
 	logger.info(`Stream ended: ${torrent.name} (${id})`);
 
@@ -131,6 +138,7 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 
 	if (getStreams(torrent).length === 0) {
+		clearTimeout(data.timeout);
 		data.timeout = setTimeout(() => {
 			if (getStreams(torrent).length > 0) return;
 			torrent.destroy(undefined, () => {
