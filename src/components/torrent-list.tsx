@@ -38,13 +38,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 
-export function TorrentList({
-	torrents,
-	showProgress,
-}: {
-	torrents: TorrentStats[];
-	showProgress?: boolean;
-}) {
+export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 	const [cardsParent] = useAutoAnimate();
 
 	const { data, mutate } = useSWR("torrents", getTorrents, {
@@ -54,7 +48,7 @@ export function TorrentList({
 
 	return (
 		<div ref={cardsParent} className="flex flex-col gap-6">
-			{data.length === 0 && (
+			{data.torrents.length === 0 && (
 				<div
 					key="no-torrents"
 					className="p-12 text-center text-muted-foreground"
@@ -62,11 +56,11 @@ export function TorrentList({
 					No torrents are added currently.
 				</div>
 			)}
-			{data.map((torrent) => (
+			{data.torrents.map((torrent) => (
 				<TorrentCard
 					key={torrent.infoHash}
 					torrent={torrent}
-					showProgress={showProgress}
+					showProgress={data.showProgress}
 					onRemoved={async () => {
 						await mutate();
 					}}
@@ -81,7 +75,7 @@ function TorrentCard({
 	showProgress,
 	onRemoved,
 }: {
-	torrent: TorrentStats;
+	torrent: TorrentStats["torrents"][number];
 	showProgress?: boolean;
 	onRemoved: () => Promise<void>;
 }) {

@@ -1,4 +1,4 @@
-import { parseEnum } from "./enum";
+import { parseEnum, tryParseEnum } from "./enum";
 import { TorrentFormat } from "./format";
 
 export enum LogLevel {
@@ -50,7 +50,9 @@ export const config = {
 	torrentRemoveTimeout:
 		Number(process.env.TORRENT_REMOVE_TIMEOUT) || 5 * 60 * 1000,
 	torrentProviders: process.env.TORRENT_PROVIDERS?.split(",") ?? [],
-	torrentFormats: process.env.TORRENT_FORMATS?.split(",") ?? [
+	torrentFormats: (process.env.TORRENT_FORMATS?.split(",")
+		.map((format) => tryParseEnum(TorrentFormat, format, TorrentFormat.Unknown))
+		.filter(Boolean) as TorrentFormat[]) ?? [
 		TorrentFormat["4K"],
 		TorrentFormat["1080p"],
 		TorrentFormat["720p"],
