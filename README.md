@@ -2,21 +2,9 @@
 
 Self-hosted Stremio addon for torrent streaming, with optional in-memory storage, and automatic TLS.
 
-## DuckDNS Domain Setup
+## How to run the app
 
-Stremio requires addons to be hosted behind HTTPS, Caddy with it's DuckDNS plugin provides an easy solution.
-
-1. Create a DuckDNS account: https://www.duckdns.org
-2. Create a subdomain in the DuckDNS dashboard and point it to your server's lan IP (you'll also need to disable DNS rebinding protection in your router settings if it was enabled)
-3. Set these environment variables for the application:
-- DUCKDNS_TOKEN: your DuckDNS token
-- DOMAIN_NAME: your-subdomain.duckdns.org
-4. Start the app, Caddy will request and renew TLS certificates automatically
-
-
-## Quick Start
-
-### Build Docker image from source
+### Building Docker image from source
 
 1. Clone the repo
 ```bash
@@ -28,7 +16,7 @@ git clone https://github.com/torrentstream/torrent-stream.git
 docker compose up -d
 ```
 
-### Use prebuilt Docker image
+### Using prebuilt Docker image
 
 1. Pull latest image from Docker Hub:
 ```bash
@@ -53,9 +41,39 @@ docker run -d \
   torrentstream/torrent-stream:latest
 ```
 
-### Install Stremio addon
-1. Open your browser at https://your-subdomain.duckdns.org (wait until Caddy resolves certificate before visiting the page). You can also use http://localhost:3000 but it will only work on the server host
-2. Click the Install Stremio Addon button or right click it and copy manifest URL to install the addon into Stremio
+## How to install the addon
+
+Stremio requires addons to be served over HTTPS. There are multiple ways to deal with this.
+
+### Let Torrent Stream bypass the check
+
+Using some client side API calls, Torrent Stream can get around Stremio's HTTPS requirement.
+
+1. Run the app
+2. Open your browser at http://localhost:3000 or http://192.168.1.10:3000 (replace LAN IP and port number according to your setup, obviously localhost will only work when the addon and Stremio client is running on the same host)
+3. Click the Install Stremio Addon button, the app will detect that it is being served over plain HTTP and a dialog will pop up
+4. Enter your credentials and press install, the addon will add itself to your Stremio account
+
+### Use Caddy to resolve certificates
+
+Caddy and it's DuckDNS plugin is bundled with the docker container and it can automatically serve the addon over HTTPS.
+
+1. Create a DuckDNS account: https://www.duckdns.org
+2. Create a subdomain in the DuckDNS dashboard and point it to your server's lan IP (you'll also need to disable DNS rebinding protection in your router settings if it was enabled)
+3. Set these environment variables for the application:
+- DUCKDNS_TOKEN: your DuckDNS token
+- DOMAIN_NAME: your-subdomain.duckdns.org
+4. Run the app, Caddy will request and renew TLS certificates automatically
+5. Open your browser at https://your-subdomain.duckdns.org (wait until Caddy resolves the certificate if the page doesn't load at first)
+6. Click the Install Stremio Addon button or right click it and copy link, then use the manifest URL to install it into Stremio
+
+### Bring your own domain and/or reverse proxy
+
+If you already have your own domain and a reverse proxy setup, or any other way to provision TLS certificates, you can use it to serve the addon over HTTPS.
+
+1. Run the app
+2. Set up your infrastructure so the addon is accessible at an HTTPS address, then open it in your browser.
+3. Click the Install Stremio Addon button or right click it and copy link, then use the manifest URL to install it into Stremio
 
 ## Environment Variables
 
