@@ -44,7 +44,7 @@ export class TorrentInfo {
 		this.readableDownloadSpeed = `${getReadableSize(this.downloadSpeed)}/s`;
 		this.uploadSpeed = torrent.uploadSpeed;
 		this.readableUploadSpeed = `${getReadableSize(this.uploadSpeed)}/s`;
-		this.historicalSpeeds = getHistoricalSpeeds(this.infoHash);
+		this.historicalSpeeds = getHistoricalSpeeds(torrent);
 		this.peers = torrent.numPeers;
 		this.streams = getStreams(torrent).length;
 		this.files = torrent.files.map(

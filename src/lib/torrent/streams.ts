@@ -5,34 +5,24 @@ import { LRU } from "@/lib/lru";
 import { torrentClient } from "./clients";
 import { TorrentStreamChunkStore } from "./store";
 
+interface TorrentData {
+	streams: Map<string, TorrentStream>;
+	speeds: LRU<number, { date: Date; upload: number; download: number }>;
+	timeout?: NodeJS.Timeout;
+}
+
 declare global {
-	var torrentDataMap:
-		| Map<
-				string,
-				{
-					streams: Map<string, TorrentStream>;
-					speeds: LRU<number, { date: Date; upload: number; download: number }>;
-					timeout?: NodeJS.Timeout;
-				}
-		  >
-		| undefined;
+	var torrentDataMap: Map<Torrent, TorrentData> | undefined;
 }
 
 if (!global.torrentDataMap) {
-	const map = new Map<
-		string,
-		{
-			streams: Map<string, TorrentStream>;
-			speeds: LRU<number, { date: Date; upload: number; download: number }>;
-			timeout?: NodeJS.Timeout;
-		}
-	>();
+	const map = new Map<Torrent, TorrentData>();
 
 	global.torrentDataMap = map;
 
 	setInterval(() => {
 		torrentClient.torrents.forEach((torrent) => {
-			const data = map.get(torrent.infoHash);
+			const data = map.get(torrent);
 			if (!data) return;
 			const now = new Date();
 			data.speeds.put(now.getTime(), {
@@ -66,11 +56,11 @@ export class TorrentStream {
 }
 
 export function registerTorrent(torrent: Torrent) {
-	if (torrentData.has(torrent.infoHash)) return;
+	if (torrentData.has(torrent)) return;
 	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
 		torrent.store = new TorrentStreamChunkStore(torrent);
 	}
-	torrentData.set(torrent.infoHash, {
+	torrentData.set(torrent, {
 		streams: new Map<string, TorrentStream>(),
 		speeds: new LRU<number, { date: Date; upload: number; download: number }>(
 			300,
@@ -80,13 +70,13 @@ export function registerTorrent(torrent: Torrent) {
 }
 
 export function unregisterTorrent(torrent: Torrent) {
-	const data = torrentData.get(torrent.infoHash);
+	const data = torrentData.get(torrent);
 	if (!data) return;
 	clearTimeout(data.timeout);
 	data.streams.forEach((stream) => {
 		clearTimeout(stream.timeout);
 	});
-	torrentData.delete(torrent.infoHash);
+	torrentData.delete(torrent);
 	logger.info(`Torrent removed: ${torrent.name} (${torrent.infoHash})`);
 	runGarbageCollection("A torrent was removed");
 }
@@ -96,7 +86,7 @@ export function registerStream(
 	torrent: Torrent,
 	file: TorrentFile,
 ) {
-	const data = torrentData.get(torrent.infoHash);
+	const data = torrentData.get(torrent);
 	if (!data) throw new Error("Torrent not registered");
 
 	let stream = data.streams.get(id);
@@ -121,7 +111,7 @@ export function registerStream(
 }
 
 export function unregisterStream(id: string, torrent: Torrent) {
-	const data = torrentData.get(torrent.infoHash);
+	const data = torrentData.get(torrent);
 	if (!data) return;
 
 	const stream = data.streams.get(id);
@@ -140,7 +130,13 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	if (getStreams(torrent).length === 0) {
 		clearTimeout(data.timeout);
 		data.timeout = setTimeout(() => {
-			if (getStreams(torrent).length > 0) return;
+			if (getStreams(torrent).length > 0) {
+				logger.debug(
+					`Removal cancelled: ${torrent.name} (${torrent.infoHash})`,
+				);
+				return;
+			}
+			logger.debug(`Removing torrent: ${torrent.name} (${torrent.infoHash})`);
 			torrent.destroy(undefined, () => {
 				unregisterTorrent(torrent);
 			});
@@ -148,16 +144,14 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 }
 
-export function getStreams(torrent: Torrent | string) {
-	const infoHash = typeof torrent === "string" ? torrent : torrent.infoHash;
-	return torrentData.get(infoHash)?.streams.values().toArray() ?? [];
+export function getStreams(torrent: Torrent) {
+	return torrentData.get(torrent)?.streams.values().toArray() ?? [];
 }
 
-export function getHistoricalSpeeds(torrent: Torrent | string) {
-	const infoHash = typeof torrent === "string" ? torrent : torrent.infoHash;
+export function getHistoricalSpeeds(torrent: Torrent) {
 	return (
 		torrentData
-			.get(infoHash)
+			.get(torrent)
 			?.speeds.map.entries()
 			.map(([, { date, download, upload }]) => ({
 				date,
