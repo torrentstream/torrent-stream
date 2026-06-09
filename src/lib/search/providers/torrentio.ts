@@ -68,7 +68,7 @@ export class TorrentioProvider extends TorrentSearchProvider {
 
 			const url = [
 				`https://torrentio.strem.fun`,
-				...[this.allProvidersEnabled() ? [configParam] : []],
+				...(this.allProvidersEnabled() ? [] : [configParam]),
 				`stream`,
 				category,
 				json,
