@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Check, Copy, Loader2 } from "lucide-react";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,8 +55,10 @@ export function InstallDialog({
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
+	const [copied, setCopied] = useState(false);
 
 	const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	const handleInstall = async () => {
 		setLoading(true);
@@ -204,16 +206,50 @@ export function InstallDialog({
 		}
 	};
 
+	const handleCopy = async () => {
+		const manifestUrl = `${protocol}//${host}/api/manifest.json`;
+
+		try {
+			if (navigator.clipboard) {
+				await navigator.clipboard.writeText(manifestUrl);
+			} else {
+				// The clipboard API is unavailable on insecure origins, which is
+				// exactly where this dialog is shown (except on localhost)
+				const textarea = document.createElement("textarea");
+				textarea.value = manifestUrl;
+				textarea.style.position = "fixed";
+				textarea.style.opacity = "0";
+				document.body.appendChild(textarea);
+				textarea.select();
+				document.execCommand("copy");
+				textarea.remove();
+			}
+		} catch {
+			return;
+		}
+
+		setCopied(true);
+		if (copyTimeoutRef.current) {
+			clearTimeout(copyTimeoutRef.current);
+		}
+		copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+	};
+
 	const handleOpenChange = (open: boolean) => {
 		if (closeTimeoutRef.current) {
 			clearTimeout(closeTimeoutRef.current);
 			closeTimeoutRef.current = null;
+		}
+		if (copyTimeoutRef.current) {
+			clearTimeout(copyTimeoutRef.current);
+			copyTimeoutRef.current = null;
 		}
 		setOpen(open);
 		setTimeout(() => {
 			setLoading(false);
 			setError(null);
 			setSuccess(false);
+			setCopied(false);
 			setEmail("");
 			setPassword("");
 			setAuthKey("");
@@ -298,7 +334,7 @@ export function InstallDialog({
 
 				{error && <FieldError>{error}</FieldError>}
 
-				<DialogFooter>
+				<DialogFooter className="flex-col sm:flex-col">
 					<Button
 						onClick={handleInstall}
 						disabled={loading || success}
@@ -316,6 +352,24 @@ export function InstallDialog({
 							</>
 						) : (
 							"Install Addon"
+						)}
+					</Button>
+					<Button
+						variant="outline"
+						onClick={handleCopy}
+						disabled={loading}
+						className="w-full"
+					>
+						{copied ? (
+							<>
+								<Check className="mr-2 h-4 w-4" />
+								Copied Manifest URL!
+							</>
+						) : (
+							<>
+								<Copy className="mr-2 h-4 w-4" />
+								Copy Manifest URL
+							</>
 						)}
 					</Button>
 				</DialogFooter>
