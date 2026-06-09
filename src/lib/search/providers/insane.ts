@@ -90,7 +90,7 @@ export class InsaneProvider extends TorrentSearchProvider {
 					params.append("cat[]", category.toString());
 				}
 
-				const link = `https://newinsane.info/browse.php?${params.toString()}}`;
+				const link = `https://newinsane.info/browse.php?${params.toString()}`;
 				const torrentsPage = await this.fetch(link, {
 					signal: AbortSignal.timeout(config.webRequestTimeout),
 				});

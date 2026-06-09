@@ -92,16 +92,16 @@ export class TorrentioProvider extends TorrentSearchProvider {
 				const fileIndex = stream.fileIdx;
 
 				const tracker =
-					stream.title?.split("⚙️ ")[1].split("\n")[0] || "Torrentio";
+					stream.title?.split("⚙️ ")[1]?.split("\n")[0] || "Torrentio";
 
 				const category = stream.name.split("\n")[1] || undefined;
 
 				const size = this.parseSize(
-					stream.title?.split("💾 ")[1].split(" ⚙️")[0],
+					stream.title?.split("💾 ")[1]?.split(" ⚙️")[0],
 				);
 
 				const seeds =
-					Number(stream.title?.split("👤 ")[1].split(" 💾")[0]) || undefined;
+					Number(stream.title?.split("👤 ")[1]?.split(" 💾")[0]) || undefined;
 
 				const trackers = (stream.sources || [])
 					.map((tr) => `&tr=${encodeURIComponent(tr)}`)
