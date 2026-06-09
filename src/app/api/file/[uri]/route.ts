@@ -54,9 +54,25 @@ export async function GET(
 
 	const positions = rangeValue.split("-");
 
-	let start = Number(positions[0]);
-	if (Number.isNaN(start)) {
-		start = 0;
+	let start: number;
+	let end: number;
+
+	if (!positions[0] && positions[1]) {
+		const suffixLength = Number(positions[1]);
+		start =
+			Number.isNaN(suffixLength) || suffixLength <= 0
+				? 0
+				: Math.max(file.length - suffixLength, 0);
+		end = file.length - 1;
+	} else {
+		start = Number(positions[0]);
+		if (Number.isNaN(start)) {
+			start = 0;
+		}
+		end = positions[1] ? Number(positions[1]) : file.length - 1;
+		if (Number.isNaN(end) || end >= file.length) {
+			end = file.length - 1;
+		}
 	}
 
 	if (start >= file.length) {
@@ -64,11 +80,6 @@ export async function GET(
 			status: 416,
 			headers: { "Content-Range": `bytes */${file.length}` },
 		});
-	}
-
-	let end = positions[1] ? Number(positions[1]) : file.length - 1;
-	if (Number.isNaN(end) || end >= file.length) {
-		end = file.length - 1;
 	}
 
 	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
