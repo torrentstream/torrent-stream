@@ -40,7 +40,25 @@ COPY . .
 RUN bun run build
 
 # ==========================================
-# Stage 4: Final Production Image
+# Stage 4: Install Production Dependencies
+# ==========================================
+FROM node:${NODE_VERSION}-slim AS prod-deps
+
+# Install Python and Build Tools for C++ modules (like utp-native)
+RUN apt-get update && \
+    apt-get install -y python3 make g++ build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=bun-image /usr/local/bin/bun /usr/local/bin/bun
+
+WORKDIR /app
+COPY package.json bun.lock ./
+
+# Install runtime dependencies only (no devDependencies)
+RUN bun install --frozen-lockfile --production
+
+# ==========================================
+# Stage 5: Final Production Image
 # ==========================================
 FROM node:${NODE_VERSION}-slim AS runner
 
@@ -60,7 +78,7 @@ WORKDIR /app
 
 # Copy Next.js Artifacts
 COPY --from=next-builder /app/package.json ./package.json
-COPY --from=next-builder /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=next-builder /app/.next ./.next
 COPY --from=next-builder /app/dist ./dist
 
