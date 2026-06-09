@@ -20,7 +20,14 @@ export async function GET(
 		return NextResponse.json({ error: "Missing file index." }, { status: 400 });
 	}
 
-	const torrent = await getOrAddTorrent(decryptText(uri));
+	let decryptedUri: string;
+	try {
+		decryptedUri = decryptText(uri);
+	} catch {
+		return NextResponse.json({ error: "Invalid stream URL." }, { status: 400 });
+	}
+
+	const torrent = await getOrAddTorrent(decryptedUri);
 	if (!torrent) {
 		return NextResponse.json(
 			{ error: "Failed to add torrent." },
