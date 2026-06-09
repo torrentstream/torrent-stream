@@ -11,15 +11,6 @@ export enum LogLevel {
 	Silent = "silent",
 }
 
-export enum EncryptionAlgo {
-	AES_128_CBC = "aes-128-cbc",
-	AES_192_CBC = "aes-192-cbc",
-	AES_256_CBC = "aes-256-cbc",
-	AES_128_GCM = "aes-128-gcm",
-	AES_192_GCM = "aes-192-gcm",
-	AES_256_GCM = "aes-256-gcm",
-}
-
 export enum TorrentStorageMode {
 	Memory = "memory",
 	File = "file",
@@ -29,11 +20,6 @@ export const config = {
 	port: Number(process.env.PORT) || 3000,
 	dev: process.env.NODE_ENV !== "production",
 	logLevel: parseEnum(LogLevel, process.env.LOG_LEVEL, LogLevel.Info),
-	encryptionAlgo: parseEnum(
-		EncryptionAlgo,
-		process.env.ENCRYPTION_ALGO,
-		EncryptionAlgo.AES_256_CBC,
-	),
 	encryptionKey: process.env.ENCRYPTION_KEY || "torrent_stream_default_key",
 	torrentStorageMode: parseEnum(
 		TorrentStorageMode,
