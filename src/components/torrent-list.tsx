@@ -107,8 +107,7 @@ function TorrentCard({
 	);
 	let lastDate = chartData[chartData.length - 1]?.date ?? new Date();
 	while (chartData.length < maxPoints) {
-		lastDate.setSeconds(lastDate.getSeconds() + interval);
-		lastDate = new Date(lastDate);
+		lastDate = new Date(lastDate.getTime() + interval * 1000);
 		chartData.push({ date: lastDate, download: 0, upload: 0 });
 	}
 
