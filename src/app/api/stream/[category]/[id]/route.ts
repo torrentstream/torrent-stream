@@ -16,7 +16,7 @@ export async function GET(
 		return NextResponse.json({ error: "Invalid category." }, { status: 400 });
 	}
 
-	const [imdbId, seasonStr, episodeStr] = id.replace(/.json$/, "").split(":");
+	const [imdbId, seasonStr, episodeStr] = id.replace(/\.json$/, "").split(":");
 
 	if (!isImdbId(imdbId)) {
 		return NextResponse.json(
@@ -26,7 +26,7 @@ export async function GET(
 	}
 
 	const season = seasonStr ? Number(seasonStr) : undefined;
-	if (season !== undefined && (Number.isNaN(season) || season < 1)) {
+	if (season !== undefined && (Number.isNaN(season) || season < 0)) {
 		return NextResponse.json(
 			{ error: "Invalid season number." },
 			{ status: 400 },

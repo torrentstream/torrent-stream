@@ -36,8 +36,8 @@ export async function getStremioStreams(
 		if (!isAllowedLanguage(torrent.language.code)) return false;
 		if (!isAllowedFormat(torrent.formats.formats)) return false;
 		if (
-			season &&
-			episode &&
+			season !== undefined &&
+			episode !== undefined &&
 			!torrent.isCorrectEpisode(Number(season), Number(episode))
 		)
 			return false;
@@ -128,7 +128,7 @@ async function getStreamsFromTorrent(
 	const { flag, language } = torrent.language;
 
 	let videos = info.files.filter((file) => file.isVideo);
-	if (season && episode) {
+	if (season !== undefined && episode !== undefined) {
 		videos = videos.filter((file) =>
 			file.isCorrectEpisode(Number(season), Number(episode)),
 		);
