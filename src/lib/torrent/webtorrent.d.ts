@@ -55,6 +55,7 @@ declare module "webtorrent" {
 	}
 
 	export interface Torrent {
+		destroyed: boolean;
 		store: ChunkStore;
 		_select(
 			start: number,

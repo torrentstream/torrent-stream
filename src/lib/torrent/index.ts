@@ -10,20 +10,32 @@ export function getTorrentInfo(uri: string) {
 	return new Promise<TorrentInfo | undefined>((resolve) => {
 		let completed = false;
 
+		const onTorrent = (torrent: Torrent) => {
+			if (completed) return;
+			if (torrent.destroyed) {
+				completed = true;
+				clearTimeout(timeout);
+				resolve(undefined);
+				return;
+			}
+			if (!torrent.ready) {
+				torrent.once("ready", () => onTorrent(torrent));
+				return;
+			}
+			completed = true;
+			clearTimeout(timeout);
+			const info = new TorrentInfo(torrent);
+			torrent.destroy();
+			resolve(info);
+		};
+
 		const torrent = infoClient.add(
 			uri,
 			{
 				store: MemoryChunkStore,
 				destroyStoreOnDestroy: true,
 			},
-			(torrent) => {
-				if (completed) return;
-				completed = true;
-				clearTimeout(timeout);
-				const info = new TorrentInfo(torrent);
-				torrent.destroy();
-				resolve(info);
-			},
+			onTorrent,
 		);
 
 		const timeout = setTimeout(() => {
@@ -39,6 +51,24 @@ export function getOrAddTorrent(uri: string) {
 	return new Promise<Torrent | undefined>((resolve) => {
 		let completed = false;
 
+		const onTorrent = (torrent: Torrent) => {
+			if (completed) return;
+			if (torrent.destroyed) {
+				completed = true;
+				clearTimeout(timeout);
+				resolve(undefined);
+				return;
+			}
+			if (!torrent.ready) {
+				torrent.once("ready", () => onTorrent(torrent));
+				return;
+			}
+			completed = true;
+			clearTimeout(timeout);
+			registerTorrent(torrent);
+			resolve(torrent);
+		};
+
 		const torrent = torrentClient.add(
 			uri,
 			{
@@ -48,13 +78,7 @@ export function getOrAddTorrent(uri: string) {
 				destroyStoreOnDestroy: true,
 				deselect: true,
 			},
-			(torrent) => {
-				if (completed) return;
-				completed = true;
-				clearTimeout(timeout);
-				registerTorrent(torrent);
-				resolve(torrent);
-			},
+			onTorrent,
 		);
 
 		const timeout = setTimeout(() => {
