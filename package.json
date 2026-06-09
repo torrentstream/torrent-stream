@@ -4,7 +4,8 @@
 		"dev": "tsx watch --no-deprecation src/server.ts",
 		"build": "next build && tsc --project tsconfig.server.json",
 		"start": "cross-env NODE_ENV=production node --no-deprecation --expose-gc dist/server.js",
-		"lint": "biome check"
+		"lint": "biome check",
+		"typecheck": "next typegen && tsc --noEmit"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.0.0",
