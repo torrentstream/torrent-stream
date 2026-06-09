@@ -1,12 +1,32 @@
 import MemoryChunkStore from "memory-chunk-store";
 import type { FileIterator, Torrent, TorrentFile } from "webtorrent";
 import { config, TorrentStorageMode } from "@/lib/config";
+import { createLimit } from "@/lib/limit";
 import { logger } from "@/lib/logger";
+import { LRU } from "@/lib/lru";
 import { infoClient, torrentClient } from "./clients";
 import { registerStream, registerTorrent, type TorrentStream } from "./streams";
 import { TorrentInfo } from "./types";
 
+const torrentInfoCache = new LRU<string, Promise<TorrentInfo | undefined>>(500);
+const limitFetchTorrentInfo = createLimit(10);
+
 export function getTorrentInfo(uri: string) {
+	const cached = torrentInfoCache.get(uri);
+	if (cached) return cached;
+
+	const promise = limitFetchTorrentInfo(() => fetchTorrentInfo(uri)).then(
+		(info) => {
+			if (!info) torrentInfoCache.delete(uri);
+			return info;
+		},
+	);
+
+	torrentInfoCache.put(uri, promise);
+	return promise;
+}
+
+function fetchTorrentInfo(uri: string) {
 	return new Promise<TorrentInfo | undefined>((resolve) => {
 		let completed = false;
 

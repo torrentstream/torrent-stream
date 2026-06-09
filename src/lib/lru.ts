@@ -54,6 +54,10 @@ export class LRU<K, V> {
 		return value;
 	}
 
+	delete(key: K) {
+		return this.map.delete(key);
+	}
+
 	clear() {
 		const evicted = this.map.keys().toArray();
 		this.map.clear();
