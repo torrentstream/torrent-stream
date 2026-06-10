@@ -19,6 +19,7 @@ interface TorrentData {
 	speeds: LRU<number, { date: Date; upload: number; download: number }>;
 	timeout?: NodeJS.Timeout;
 	seed?: SeedState;
+	streamedFiles: Set<string>;
 }
 
 interface SeedState {
@@ -36,6 +37,7 @@ interface SeedRecord {
 	downloaded: number;
 	seedSeconds: number;
 	addedAt: string;
+	files: string[];
 }
 
 declare global {
@@ -182,6 +184,7 @@ function initSeedState(torrent: Torrent): SeedState {
 			downloaded: 0,
 			seedSeconds: 0,
 			addedAt: new Date().toISOString(),
+			files: [],
 		};
 		seedRecords[torrent.infoHash] = record;
 		seedRecordsDirty = true;
@@ -306,12 +309,14 @@ export function registerTorrent(torrent: Torrent) {
 	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
 		torrent.store = new TorrentStreamChunkStore(torrent);
 	}
+	const seed = seedingEnabled ? initSeedState(torrent) : undefined;
 	torrentData.set(torrent, {
 		streams: new Map<string, TorrentStream>(),
 		speeds: new LRU<number, { date: Date; upload: number; download: number }>(
 			300,
 		),
-		seed: seedingEnabled ? initSeedState(torrent) : undefined,
+		seed,
+		streamedFiles: new Set(seedRecords[torrent.infoHash]?.files ?? []),
 	});
 	logger.info(`Torrent added: ${torrent.name} (${torrent.infoHash})`);
 }
@@ -366,6 +371,16 @@ export function registerStream(
 
 	stream.files.set(file.path, file);
 
+	if (!data.streamedFiles.has(file.path)) {
+		data.streamedFiles.add(file.path);
+		const record = seedRecords[torrent.infoHash];
+		if (record && !record.files.includes(file.path)) {
+			record.files.push(file.path);
+			seedRecordsDirty = true;
+			flushSeedRecords(true);
+		}
+	}
+
 	return stream;
 }
 
@@ -393,6 +408,10 @@ export function unregisterStream(id: string, torrent: Torrent) {
 
 export function getStreams(torrent: Torrent) {
 	return torrentData.get(torrent)?.streams.values().toArray() ?? [];
+}
+
+export function getStreamedFiles(torrent: Torrent) {
+	return torrentData.get(torrent)?.streamedFiles ?? new Set<string>();
 }
 
 export function getHistoricalSpeeds(torrent: Torrent) {

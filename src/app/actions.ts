@@ -35,6 +35,7 @@ export interface TorrentStats {
 			isVideo: boolean;
 			isSubtitle: boolean;
 			streams: number;
+			streamed: boolean;
 		}[];
 	}[];
 	showProgress: boolean;
@@ -72,6 +73,7 @@ export async function getTorrents(): Promise<TorrentStats> {
 							: undefined,
 					historicalSpeeds: info.historicalSpeeds,
 					files: info.files
+						.filter((file) => file.streamed)
 						.map((file) => ({
 							name: file.name,
 							path: file.path,
@@ -81,6 +83,7 @@ export async function getTorrents(): Promise<TorrentStats> {
 							isVideo: file.isVideo,
 							isSubtitle: file.isSubtitle,
 							streams: file.streams,
+							streamed: file.streamed,
 						}))
 						.sort((a, b) => a.path.localeCompare(b.path)),
 				};

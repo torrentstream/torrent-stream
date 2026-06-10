@@ -7,7 +7,7 @@ import {
 	isVideoFile,
 } from "@/lib/file";
 import { getFormats, type TorrentFormat } from "@/lib/format";
-import { getHistoricalSpeeds, getStreams } from "./streams";
+import { getHistoricalSpeeds, getStreamedFiles, getStreams } from "./streams";
 
 export class TorrentInfo {
 	name: string;
@@ -65,6 +65,7 @@ export class TorrentFileInfo {
 	readableDownloaded: string;
 	formats: { formats: TorrentFormat[]; quality: string; score: number };
 	streams: number;
+	streamed: boolean;
 	isVideo: boolean;
 	isSubtitle: boolean;
 
@@ -82,6 +83,8 @@ export class TorrentFileInfo {
 		this.streams = getStreams(torrent).filter((stream) =>
 			stream.files.has(this.path),
 		).length;
+		this.streamed =
+			this.streams > 0 || getStreamedFiles(torrent).has(this.path);
 		this.isVideo = isVideoFile(this.name);
 		this.isSubtitle = isSubtitleFile(this.name);
 	}

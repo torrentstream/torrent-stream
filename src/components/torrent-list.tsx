@@ -92,7 +92,7 @@ function TorrentCard({
 
 	const displayName = torrent.name.split(".").join(".\u200B");
 
-	const files = torrent.files.filter((file) => file.streams);
+	const files = torrent.files.filter((file) => file.streamed);
 
 	const handleRemove = async () => {
 		if (isRemoving) return;
