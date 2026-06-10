@@ -37,6 +37,7 @@ export const config = {
 	torrentStoragePath: process.env.TORRENT_STORAGE_PATH || "/data",
 	torrentStatePath: process.env.TORRENT_STATE_PATH || "/state",
 	torrentKeepFiles: process.env.TORRENT_KEEP_FILES === "true",
+	torrentIdleDownload: process.env.TORRENT_IDLE_DOWNLOAD === "true",
 	torrentSeedRatio: Number(process.env.TORRENT_SEED_RATIO) || 0,
 	torrentSeedTime: Number(process.env.TORRENT_SEED_TIME) || 0,
 	torrentSeedTimeIncrement:

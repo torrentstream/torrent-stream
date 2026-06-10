@@ -402,8 +402,21 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 
 	if (getStreams(torrent).length === 0) {
+		applyIdleDownloadPolicy(torrent);
 		scheduleRemoval(torrent, config.torrentRemoveTimeout);
 	}
+}
+
+export function applyIdleDownloadPolicy(torrent: Torrent) {
+	if (config.torrentStorageMode !== TorrentStorageMode.File) return;
+	torrent._selections.clear();
+	if (config.torrentIdleDownload) {
+		const streamed = getStreamedFiles(torrent);
+		for (const file of torrent.files) {
+			if (streamed.has(file.path)) file.select();
+		}
+	}
+	torrent._updateSelections();
 }
 
 export function getStreams(torrent: Torrent) {
@@ -467,6 +480,7 @@ export function resumeSeedingTorrents() {
 			},
 			(torrent) => {
 				registerTorrent(torrent);
+				applyIdleDownloadPolicy(torrent);
 				scheduleRemoval(torrent, config.torrentRemoveTimeout);
 				logger.info(`Seeding resumed: ${torrent.name} (${torrent.infoHash})`);
 			},

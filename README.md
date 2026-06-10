@@ -91,6 +91,7 @@ The following env vars can be used to configure the application:
 | TORRENT_STORAGE_PATH | Desired torrent storage directory path. Only applies if storage mode is `file`. | /data |
 | TORRENT_STATE_PATH | Directory for persistent seed state. Only applies if storage mode is `file` and seed requirements are set. | /state |
 | TORRENT_KEEP_FILES | Keep downloaded content on disk after a torrent is removed from the client. Only applies if storage mode is `file`. | true |
+| TORRENT_IDLE_DOWNLOAD | Keep downloading files that have been streamed to completion while the torrent is idle. Only applies if storage mode is `file`. | true |
 | TORRENT_SEED_RATIO | Keep idle torrents in the client until their cumulative upload/download ratio reaches this value. Only applies if storage mode is `file`. | 1.0 |
 | TORRENT_SEED_TIME | Keep idle torrents in the client until they have been loaded for this many seconds in total. Only applies if storage mode is `file`. | 172800 |
 | TORRENT_SEED_TIME_INCREMENT | Additional required seed time in seconds per `TORRENT_SEED_TIME_INCREMENT_BYTES` downloaded, on top of `TORRENT_SEED_TIME`. | 1440 |
