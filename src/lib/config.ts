@@ -16,6 +16,12 @@ export enum TorrentStorageMode {
 	File = "file",
 }
 
+function parseLimit(value: string | undefined) {
+	if (!value) return -1;
+	const parsed = Number(value);
+	return Number.isNaN(parsed) ? -1 : parsed;
+}
+
 export const config = {
 	port: Number(process.env.PORT) || 3000,
 	dev: process.env.NODE_ENV !== "production",
@@ -39,8 +45,8 @@ export const config = {
 		Number(process.env.TORRENT_SEED_TIME_INCREMENT_BYTES) || 0,
 	torrentSeedTimeRatioDiscount:
 		process.env.TORRENT_SEED_TIME_RATIO_DISCOUNT === "true",
-	torrentDownloadLimit: Number(process.env.TORRENT_DOWNLOAD_LIMIT) || -1,
-	torrentUploadLimit: Number(process.env.TORRENT_UPLOAD_LIMIT) || -1,
+	torrentDownloadLimit: parseLimit(process.env.TORRENT_DOWNLOAD_LIMIT),
+	torrentUploadLimit: parseLimit(process.env.TORRENT_UPLOAD_LIMIT),
 	torrentAddTimeout: Number(process.env.TORRENT_ADD_TIMEOUT) || 5 * 1000,
 	torrentIdleTimeout: Number(process.env.TORRENT_IDLE_TIMEOUT) || 60 * 1000,
 	torrentRemoveTimeout:

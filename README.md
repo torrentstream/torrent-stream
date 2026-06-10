@@ -96,8 +96,8 @@ The following env vars can be used to configure the application:
 | TORRENT_SEED_TIME_INCREMENT | Additional required seed time in seconds per `TORRENT_SEED_TIME_INCREMENT_BYTES` downloaded, on top of `TORRENT_SEED_TIME`. | 1440 |
 | TORRENT_SEED_TIME_INCREMENT_BYTES | The downloaded byte quantum for `TORRENT_SEED_TIME_INCREMENT`. | 1073741824 |
 | TORRENT_SEED_TIME_RATIO_DISCOUNT | Scale the required seed time by how far the ratio is from `TORRENT_SEED_RATIO` (or `1` if unset), so uploading reduces the time requirement and reaching the target ratio waives it. | true |
-| TORRENT_DOWNLOAD_LIMIT | Global download speed limit in bytes/sec. Use `-1` to disable throttling. | -1 |
-| TORRENT_UPLOAD_LIMIT | Global upload speed limit in bytes/sec. Use `-1` to disable throttling. | -1 |
+| TORRENT_DOWNLOAD_LIMIT | Global download speed limit in bytes/sec. Use `-1` to disable throttling, `0` blocks downloads entirely. | -1 |
+| TORRENT_UPLOAD_LIMIT | Global upload speed limit in bytes/sec. Use `-1` to disable throttling, `0` blocks uploads entirely. | -1 |
 | TORRENT_ADD_TIMEOUT | Cancel adding torrent to the torrent client if no data is received in this many milliseconds. | 5000 |
 | TORRENT_IDLE_TIMEOUT | Consider a torrent idle after no streams pulled any data in this many milliseconds. | 60000 |
 | TORRENT_REMOVE_TIMEOUT | Remove idle torrents from the torrent client after this many milliseconds. | 300000 |
