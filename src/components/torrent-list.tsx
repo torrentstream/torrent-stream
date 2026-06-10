@@ -6,9 +6,11 @@ import {
 	Eye,
 	File,
 	Film,
+	Gauge,
 	HardDriveDownload,
 	HardDriveUpload,
 	Subtitles,
+	Timer,
 	Trash2,
 	Upload,
 } from "lucide-react";
@@ -61,6 +63,7 @@ export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 					key={torrent.infoHash}
 					torrent={torrent}
 					showProgress={data.showProgress}
+					showDeleteFiles={data.showDeleteFiles}
 					onRemoved={async () => {
 						await mutate();
 					}}
@@ -73,16 +76,19 @@ export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 function TorrentCard({
 	torrent,
 	showProgress,
+	showDeleteFiles,
 	onRemoved,
 }: {
 	torrent: TorrentStats["torrents"][number];
 	showProgress?: boolean;
+	showDeleteFiles?: boolean;
 	onRemoved: () => Promise<void>;
 }) {
 	const [filesParent] = useAutoAnimate();
 	const [badgeParent] = useAutoAnimate();
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
 	const [isRemoving, setIsRemoving] = useState(false);
+	const [deleteFiles, setDeleteFiles] = useState(false);
 
 	const displayName = torrent.name.split(".").join(".\u200B");
 
@@ -93,7 +99,10 @@ function TorrentCard({
 		setIsRemoving(true);
 		setRemoveDialogOpen(false);
 		try {
-			await removeTorrent(torrent.infoHash);
+			await removeTorrent(
+				torrent.infoHash,
+				showDeleteFiles ? deleteFiles : undefined,
+			);
 			await onRemoved();
 		} finally {
 			setIsRemoving(false);
@@ -124,10 +133,18 @@ function TorrentCard({
 					<div ref={badgeParent} className="flex items-center gap-2">
 						{torrent.streams ? (
 							<Badge className="bg-green-800 text-white">Streaming</Badge>
+						) : torrent.seeding ? (
+							<Badge className="bg-blue-800 text-white">Seeding</Badge>
 						) : (
 							<Badge>Idle</Badge>
 						)}
-						<Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+						<Dialog
+							open={removeDialogOpen}
+							onOpenChange={(open) => {
+								setRemoveDialogOpen(open);
+								setDeleteFiles(false);
+							}}
+						>
 							<DialogTrigger
 								render={
 									<Button
@@ -150,6 +167,17 @@ function TorrentCard({
 										torrent client?
 									</DialogDescription>
 								</DialogHeader>
+								{showDeleteFiles && (
+									<label className="flex items-center gap-2 text-sm text-muted-foreground">
+										<input
+											type="checkbox"
+											checked={deleteFiles}
+											onChange={(e) => setDeleteFiles(e.target.checked)}
+											className="accent-destructive"
+										/>
+										Delete downloaded files
+									</label>
+								)}
 								<DialogFooter>
 									<DialogClose render={<Button variant="outline" />}>
 										No
@@ -175,6 +203,18 @@ function TorrentCard({
 						<Upload size={14} />
 						<FlipNumber>{torrent.uploadSpeed}</FlipNumber>
 					</div>
+					{torrent.ratio !== undefined && (
+						<div className="flex items-center gap-2 text-muted-foreground">
+							<Gauge size={14} />
+							<FlipNumber>{torrent.ratio}</FlipNumber>
+						</div>
+					)}
+					{torrent.seedTimeRemaining !== undefined && (
+						<div className="flex items-center gap-2 text-muted-foreground">
+							<Timer size={14} />
+							<FlipNumber>{torrent.seedTimeRemaining}</FlipNumber>
+						</div>
+					)}
 					{showProgress && (
 						<>
 							<div className="flex items-center gap-2 text-muted-foreground">

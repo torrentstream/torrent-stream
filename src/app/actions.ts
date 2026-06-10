@@ -1,8 +1,9 @@
 "use server";
 
 import { config, TorrentStorageMode } from "@/lib/config";
+import { getReadableDuration, getReadableSize } from "@/lib/file";
 import { torrentClient } from "@/lib/torrent/clients";
-import { unregisterTorrent } from "@/lib/torrent/streams";
+import { destroyTorrent, getSeedStats } from "@/lib/torrent/streams";
 import { TorrentInfo } from "@/lib/torrent/types";
 
 export interface TorrentStats {
@@ -17,6 +18,9 @@ export interface TorrentStats {
 		uploaded: string;
 		downloadSpeed: string;
 		uploadSpeed: string;
+		seeding: boolean;
+		ratio?: string;
+		seedTimeRemaining?: string;
 		historicalSpeeds: {
 			date: Date;
 			download: number;
@@ -34,6 +38,7 @@ export interface TorrentStats {
 		}[];
 	}[];
 	showProgress: boolean;
+	showDeleteFiles: boolean;
 }
 
 export async function getTorrents(): Promise<TorrentStats> {
@@ -43,6 +48,7 @@ export async function getTorrents(): Promise<TorrentStats> {
 			.toReversed()
 			.map((torrent) => {
 				const info = new TorrentInfo(torrent);
+				const seed = getSeedStats(torrent);
 				return {
 					name: info.name,
 					infoHash: info.infoHash,
@@ -50,10 +56,20 @@ export async function getTorrents(): Promise<TorrentStats> {
 					peers: info.peers,
 					size: info.readableSize,
 					progress: info.readableProgress,
-					downloaded: info.readableDownloaded,
-					uploaded: info.readableUploaded,
+					downloaded: seed
+						? getReadableSize(seed.downloaded)
+						: info.readableDownloaded,
+					uploaded: seed
+						? getReadableSize(seed.uploaded)
+						: info.readableUploaded,
 					downloadSpeed: info.readableDownloadSpeed,
 					uploadSpeed: info.readableUploadSpeed,
+					seeding: seed?.seeding ?? false,
+					ratio: seed?.ratio.toFixed(2),
+					seedTimeRemaining:
+						seed?.secondsRemaining !== undefined
+							? getReadableDuration(seed.secondsRemaining)
+							: undefined,
 					historicalSpeeds: info.historicalSpeeds,
 					files: info.files
 						.map((file) => ({
@@ -70,16 +86,17 @@ export async function getTorrents(): Promise<TorrentStats> {
 				};
 			}),
 		showProgress: config.torrentStorageMode === TorrentStorageMode.File,
+		showDeleteFiles:
+			config.torrentStorageMode === TorrentStorageMode.File &&
+			config.torrentKeepFiles,
 	};
 }
 
-export async function removeTorrent(infoHash: string): Promise<void> {
+export async function removeTorrent(
+	infoHash: string,
+	deleteFiles?: boolean,
+): Promise<void> {
 	const torrent = await torrentClient.get(infoHash);
 	if (!torrent) return;
-	return new Promise((resolve) => {
-		torrent.destroy(undefined, () => {
-			unregisterTorrent(torrent);
-			resolve();
-		});
-	});
+	await destroyTorrent(torrent, deleteFiles);
 }

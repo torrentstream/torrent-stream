@@ -86,9 +86,16 @@ The following env vars can be used to configure the application:
 | DOMAIN_NAME | DuckDNS domain (FQDN) for Caddy TLS. | - |
 | DUCKDNS_TOKEN | DuckDNS token for DNS-01 TLS. | - |
 | ENCRYPTION_KEY | Key used for encrypting stream URLs in case they contain sensitive information. Use a long random string. | - |
-| TORRENT_STORAGE_MODE | Desired torrent storage location. Possible values: `memory`, `file`. | memory |
-| TORRENT_STORAGE_PATH | Desired torrent storage directory path. Only applies if storage mode is `file`. | /data |
+| TORRENT_STORAGE_MODE | Desired torrent storage location. Possible values: `memory`, `file`. | file |
 | STREAM_MEMORY_LIMIT | Stream memory budget in bytes. Increase or decrease depending on available RAM and how many parallel streams you need. Only applies if storage mode is `memory`. | 134217728 |
+| TORRENT_STORAGE_PATH | Desired torrent storage directory path. Only applies if storage mode is `file`. | /data |
+| TORRENT_STATE_PATH | Directory for persistent seed state. Only applies if storage mode is `file` and seed requirements are set. | /state |
+| TORRENT_KEEP_FILES | Keep downloaded content on disk after a torrent is removed from the client. Only applies if storage mode is `file`. | true |
+| TORRENT_SEED_RATIO | Keep idle torrents in the client until their cumulative upload/download ratio reaches this value. Only applies if storage mode is `file`. | 1.0 |
+| TORRENT_SEED_TIME | Keep idle torrents in the client until they have been loaded for this many seconds in total. Only applies if storage mode is `file`. | 172800 |
+| TORRENT_SEED_TIME_INCREMENT | Additional required seed time in seconds per `TORRENT_SEED_TIME_INCREMENT_BYTES` downloaded, on top of `TORRENT_SEED_TIME`. | 1440 |
+| TORRENT_SEED_TIME_INCREMENT_BYTES | The downloaded byte quantum for `TORRENT_SEED_TIME_INCREMENT`. | 1073741824 |
+| TORRENT_SEED_TIME_RATIO_DISCOUNT | Scale the required seed time by how far the ratio is from `TORRENT_SEED_RATIO` (or `1` if unset), so uploading reduces the time requirement and reaching the target ratio waives it. | true |
 | TORRENT_DOWNLOAD_LIMIT | Global download speed limit in bytes/sec. Use `-1` to disable throttling. | -1 |
 | TORRENT_UPLOAD_LIMIT | Global upload speed limit in bytes/sec. Use `-1` to disable throttling. | -1 |
 | TORRENT_ADD_TIMEOUT | Cancel adding torrent to the torrent client if no data is received in this many milliseconds. | 5000 |
@@ -102,3 +109,23 @@ The following env vars can be used to configure the application:
 | NCORE_PASS | Your nCore password (if the provider is enabled). | - |
 | INSANE_USER | Your iNSANE username (if the provider is enabled). | - |
 | INSANE_PASS | Your iNSANE password. (if the provider is enabled). | - |
+
+A torrent is removed once **either** seed requirement is met. A ratio-only
+configuration can hold a torrent indefinitely when nobody is downloading, so
+setting `TORRENT_SEED_TIME` as well is recommended as a cap. Seeding survives
+restarts: torrent metainfo and counters are persisted under
+`TORRENT_STATE_PATH`, re-added on boot, and the on-disk data is re-verified
+before seeding continues. Running multiple app instances against the same
+state or storage path is unsupported.
+
+The full required seed time formula is:
+
+```
+(TORRENT_SEED_TIME + TORRENT_SEED_TIME_INCREMENT * downloaded / TORRENT_SEED_TIME_INCREMENT_BYTES) * (1 - ratio / TORRENT_SEED_RATIO, if the discount is enabled)
+```
+
+For example, a tracker rule of `(1 - ratio) * (48 + 0.4 * downloaded GiB)`
+hours maps to `TORRENT_SEED_RATIO=1.0`, `TORRENT_SEED_TIME=172800`,
+`TORRENT_SEED_TIME_INCREMENT=1440`,
+`TORRENT_SEED_TIME_INCREMENT_BYTES=1073741824` and
+`TORRENT_SEED_TIME_RATIO_DISCOUNT=true`.

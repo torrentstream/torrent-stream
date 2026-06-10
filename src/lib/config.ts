@@ -26,9 +26,19 @@ export const config = {
 		process.env.TORRENT_STORAGE_MODE,
 		TorrentStorageMode.Memory,
 	),
-	torrentStoragePath: process.env.TORRENT_STORAGE_PATH || "/data",
 	streamMemoryLimit:
 		Number(process.env.STREAM_MEMORY_LIMIT) || 128 * 1024 * 1024,
+	torrentStoragePath: process.env.TORRENT_STORAGE_PATH || "/data",
+	torrentStatePath: process.env.TORRENT_STATE_PATH || "/state",
+	torrentKeepFiles: process.env.TORRENT_KEEP_FILES === "true",
+	torrentSeedRatio: Number(process.env.TORRENT_SEED_RATIO) || 0,
+	torrentSeedTime: Number(process.env.TORRENT_SEED_TIME) || 0,
+	torrentSeedTimeIncrement:
+		Number(process.env.TORRENT_SEED_TIME_INCREMENT) || 0,
+	torrentSeedTimeIncrementBytes:
+		Number(process.env.TORRENT_SEED_TIME_INCREMENT_BYTES) || 0,
+	torrentSeedTimeRatioDiscount:
+		process.env.TORRENT_SEED_TIME_RATIO_DISCOUNT === "true",
 	torrentDownloadLimit: Number(process.env.TORRENT_DOWNLOAD_LIMIT) || -1,
 	torrentUploadLimit: Number(process.env.TORRENT_UPLOAD_LIMIT) || -1,
 	torrentAddTimeout: Number(process.env.TORRENT_ADD_TIMEOUT) || 5 * 1000,
