@@ -56,6 +56,19 @@ declare module "webtorrent" {
 
 	export interface Torrent {
 		destroyed: boolean;
+		discovery?: {
+			tracker?: {
+				_trackers?: unknown[];
+				on(event: "update", listener: () => void): void;
+				off(event: "update", listener: () => void): void;
+				update(opts?: {
+					uploaded?: number;
+					downloaded?: number;
+					left?: number;
+					numwant?: number;
+				}): void;
+			} | null;
+		} | null;
 		store: ChunkStore;
 		_select(
 			start: number,

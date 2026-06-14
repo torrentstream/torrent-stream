@@ -244,11 +244,54 @@ function isSeedingComplete(torrent: Torrent) {
 	return false;
 }
 
-export function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
+function announceBeforeRemoval(torrent: Torrent) {
+	const tracker = torrent.discovery?.tracker;
+	const trackerCount = tracker?._trackers?.length ?? 0;
+	if (!tracker || trackerCount === 0 || config.torrentAnnounceTimeout <= 0) {
+		return Promise.resolve();
+	}
+
+	return new Promise<void>((resolve) => {
+		let responses = 0;
+		let completed = false;
+
+		const finish = () => {
+			if (completed) return;
+			completed = true;
+			clearTimeout(timeout);
+			tracker.off("update", onUpdate);
+			resolve();
+		};
+
+		const onUpdate = () => {
+			responses++;
+			if (responses >= trackerCount) finish();
+		};
+
+		const timeout = setTimeout(() => {
+			logger.debug(
+				`Final announce timed out after ${responses}/${trackerCount} tracker responses: ${torrent.name} (${torrent.infoHash})`,
+			);
+			finish();
+		}, config.torrentAnnounceTimeout);
+		timeout.unref?.();
+
+		tracker.on("update", onUpdate);
+		try {
+			tracker.update({ numwant: 0 });
+		} catch (error) {
+			logger.error(error);
+			finish();
+		}
+	});
+}
+
+export async function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
 	const destroyStore =
 		config.torrentStorageMode === TorrentStorageMode.File
 			? (deleteFiles ?? !config.torrentKeepFiles)
 			: true;
+	await announceBeforeRemoval(torrent);
 	return new Promise<void>((resolve) => {
 		if (torrent.destroyed) {
 			unregisterTorrent(torrent);
