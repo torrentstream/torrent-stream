@@ -17,7 +17,7 @@ import { TorrentStreamChunkStore } from "./store";
 interface TorrentData {
 	streams: Map<string, TorrentStream>;
 	speeds: LRU<number, { date: Date; upload: number; download: number }>;
-	timeout?: NodeJS.Timeout;
+	removalTimeout?: NodeJS.Timeout;
 	seed?: SeedState;
 	streamedFiles: Set<string>;
 }
@@ -38,6 +38,10 @@ interface SeedRecord {
 	seedSeconds: number;
 	addedAt: string;
 	files: string[];
+}
+
+interface TrackerAnnounceEmitter {
+	on(event: "trackerAnnounce", listener: () => void): void;
 }
 
 declare global {
@@ -244,54 +248,11 @@ function isSeedingComplete(torrent: Torrent) {
 	return false;
 }
 
-function announceBeforeRemoval(torrent: Torrent) {
-	const tracker = torrent.discovery?.tracker;
-	const trackerCount = tracker?._trackers?.length ?? 0;
-	if (!tracker || trackerCount === 0 || config.torrentAnnounceTimeout <= 0) {
-		return Promise.resolve();
-	}
-
-	return new Promise<void>((resolve) => {
-		let responses = 0;
-		let completed = false;
-
-		const finish = () => {
-			if (completed) return;
-			completed = true;
-			clearTimeout(timeout);
-			tracker.off("update", onUpdate);
-			resolve();
-		};
-
-		const onUpdate = () => {
-			responses++;
-			if (responses >= trackerCount) finish();
-		};
-
-		const timeout = setTimeout(() => {
-			logger.debug(
-				`Final announce timed out after ${responses}/${trackerCount} tracker responses: ${torrent.name} (${torrent.infoHash})`,
-			);
-			finish();
-		}, config.torrentAnnounceTimeout);
-		timeout.unref?.();
-
-		tracker.on("update", onUpdate);
-		try {
-			tracker.update({ numwant: 0 });
-		} catch (error) {
-			logger.error(error);
-			finish();
-		}
-	});
-}
-
-export async function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
+export function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
 	const destroyStore =
 		config.torrentStorageMode === TorrentStorageMode.File
 			? (deleteFiles ?? !config.torrentKeepFiles)
 			: true;
-	await announceBeforeRemoval(torrent);
 	return new Promise<void>((resolve) => {
 		if (torrent.destroyed) {
 			unregisterTorrent(torrent);
@@ -306,27 +267,37 @@ export async function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
 	});
 }
 
-export function scheduleRemoval(torrent: Torrent, delay: number) {
+function scheduleRemoval(torrent: Torrent) {
 	const data = torrentData.get(torrent);
-	if (!data) return;
-	clearTimeout(data.timeout);
-	data.timeout = setTimeout(() => {
+	if (!data || data.seed) return;
+	clearTimeout(data.removalTimeout);
+	data.removalTimeout = setTimeout(() => {
 		if (torrent.destroyed) {
 			unregisterTorrent(torrent);
 			return;
 		}
-		if (getStreams(torrent).length > 0) {
+		if (data.streams.size > 0) {
 			logger.debug(`Removal cancelled: ${torrent.name} (${torrent.infoHash})`);
 			return;
 		}
-		if (!isSeedingComplete(torrent)) {
-			logger.debug(`Seeding: ${torrent.name} (${torrent.infoHash})`);
-			scheduleRemoval(torrent, 60 * 1000);
-			return;
-		}
-		logger.debug(`Removing torrent: ${torrent.name} (${torrent.infoHash})`);
+		logger.debug(
+			`Removing idle torrent: ${torrent.name} (${torrent.infoHash})`,
+		);
 		destroyTorrent(torrent);
-	}, delay);
+	}, config.torrentRemoveTimeout);
+}
+
+function checkSeedRequirements(torrent: Torrent) {
+	const data = torrentData.get(torrent);
+	if (!data?.seed || data.streams.size > 0) return;
+	if (!isSeedingComplete(torrent)) {
+		logger.debug(`Seeding: ${torrent.name} (${torrent.infoHash})`);
+		return;
+	}
+	logger.debug(
+		`Removing seeded torrent: ${torrent.name} (${torrent.infoHash})`,
+	);
+	destroyTorrent(torrent);
 }
 
 export function getSeedStats(torrent: Torrent) {
@@ -361,13 +332,16 @@ export function registerTorrent(torrent: Torrent) {
 		seed,
 		streamedFiles: new Set(seedRecords[torrent.infoHash]?.files ?? []),
 	});
+	(torrent as unknown as TrackerAnnounceEmitter).on("trackerAnnounce", () => {
+		checkSeedRequirements(torrent);
+	});
 	logger.info(`Torrent added: ${torrent.name} (${torrent.infoHash})`);
 }
 
 export function unregisterTorrent(torrent: Torrent) {
 	const data = torrentData.get(torrent);
 	if (!data) return;
-	clearTimeout(data.timeout);
+	clearTimeout(data.removalTimeout);
 	data.streams.forEach((stream) => {
 		clearTimeout(stream.timeout);
 	});
@@ -398,8 +372,8 @@ export function registerStream(
 
 	let stream = data.streams.get(id);
 	if (!stream) {
-		clearTimeout(data.timeout);
-		data.timeout = undefined;
+		clearTimeout(data.removalTimeout);
+		data.removalTimeout = undefined;
 
 		stream = new TorrentStream(id, torrent);
 		data.streams.set(id, stream);
@@ -445,12 +419,12 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 
 	if (getStreams(torrent).length === 0) {
-		applyIdleDownloadPolicy(torrent);
-		scheduleRemoval(torrent, config.torrentRemoveTimeout);
+		schedulePause(torrent);
+		scheduleRemoval(torrent);
 	}
 }
 
-export function applyIdleDownloadPolicy(torrent: Torrent) {
+export function schedulePause(torrent: Torrent) {
 	if (config.torrentStorageMode !== TorrentStorageMode.File) return;
 	torrent._selections.clear();
 	if (config.torrentIdleDownload) {
@@ -523,8 +497,7 @@ export function resumeSeedingTorrents() {
 			},
 			(torrent) => {
 				registerTorrent(torrent);
-				applyIdleDownloadPolicy(torrent);
-				scheduleRemoval(torrent, config.torrentRemoveTimeout);
+				schedulePause(torrent);
 				logger.info(`Seeding resumed: ${torrent.name} (${torrent.infoHash})`);
 			},
 		);

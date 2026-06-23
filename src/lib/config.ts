@@ -49,8 +49,6 @@ export const config = {
 	torrentDownloadLimit: parseLimit(process.env.TORRENT_DOWNLOAD_LIMIT),
 	torrentUploadLimit: parseLimit(process.env.TORRENT_UPLOAD_LIMIT),
 	torrentAddTimeout: Number(process.env.TORRENT_ADD_TIMEOUT) || 5 * 1000,
-	torrentAnnounceTimeout:
-		Number(process.env.TORRENT_ANNOUNCE_TIMEOUT) || 5 * 1000,
 	torrentIdleTimeout: Number(process.env.TORRENT_IDLE_TIMEOUT) || 60 * 1000,
 	torrentRemoveTimeout:
 		Number(process.env.TORRENT_REMOVE_TIMEOUT) || 5 * 60 * 1000,
