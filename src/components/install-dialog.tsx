@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +57,7 @@ export function InstallDialog({
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const https = protocol === "https:";
 
 	const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -262,98 +264,113 @@ export function InstallDialog({
 				<DialogHeader>
 					<DialogTitle>Install Stremio Addon</DialogTitle>
 					<DialogDescription>
-						Please authenticate with Stremio. Your credentials will be sent
-						directly to Stremio's API from your browser. Nothing is stored on
-						the server.
+						{https
+							? "Press the button below to install the addon to Stremio."
+							: "Please authenticate with Stremio. Your credentials will be sent directly to Stremio's API from your browser. Nothing is stored on the server."}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className="flex gap-2">
-					<Button
-						variant={authMethod === "key" ? "default" : "outline"}
-						className="flex-1"
-						onClick={() => setAuthMethod("key")}
-					>
-						Auth Key
-					</Button>
-					<Button
-						variant={authMethod === "credentials" ? "default" : "outline"}
-						className="flex-1"
-						onClick={() => setAuthMethod("credentials")}
-					>
-						Email & Password
-					</Button>
-				</div>
-
-				{authMethod === "key" && (
-					<Field>
-						<Label htmlFor="authKey">Stremio Auth Key</Label>
-						<Input
-							id="authKey"
-							type="password"
-							placeholder="Enter your Stremio auth key"
-							value={authKey}
-							onChange={(e) => setAuthKey(e.target.value)}
-							disabled={loading}
-						/>
-						<FieldDescription className="text-xs">
-							Get your auth key from Stremio Web: open DevTools console and run{" "}
-							<span className="font-mono bg-accent p-0.5 rounded">
-								JSON.parse(localStorage.getItem("profile")).auth.key
-							</span>
-						</FieldDescription>
-					</Field>
-				)}
-
-				{authMethod === "credentials" && (
+				{!https && (
 					<>
-						<Field>
-							<Label htmlFor="email">Stremio Email</Label>
-							<Input
-								id="email"
-								type="email"
-								placeholder="Enter your Stremio email"
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								disabled={loading}
-							/>
-						</Field>
-						<Field>
-							<Label htmlFor="password">Stremio Password</Label>
-							<Input
-								id="password"
-								type="password"
-								placeholder="Enter your Stremio password"
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								disabled={loading}
-							/>
-						</Field>
+						<div className="flex gap-2">
+							<Button
+								variant={authMethod === "key" ? "default" : "outline"}
+								className="flex-1"
+								onClick={() => setAuthMethod("key")}
+							>
+								Auth Key
+							</Button>
+							<Button
+								variant={authMethod === "credentials" ? "default" : "outline"}
+								className="flex-1"
+								onClick={() => setAuthMethod("credentials")}
+							>
+								Email & Password
+							</Button>
+						</div>
+
+						{authMethod === "key" && (
+							<Field>
+								<Label htmlFor="authKey">Stremio Auth Key</Label>
+								<Input
+									id="authKey"
+									type="password"
+									placeholder="Enter your Stremio auth key"
+									value={authKey}
+									onChange={(e) => setAuthKey(e.target.value)}
+									disabled={loading}
+								/>
+								<FieldDescription className="text-xs">
+									Get your auth key from Stremio Web: open DevTools console and
+									run{" "}
+									<span className="font-mono bg-accent p-0.5 rounded">
+										JSON.parse(localStorage.getItem("profile")).auth.key
+									</span>
+								</FieldDescription>
+							</Field>
+						)}
+
+						{authMethod === "credentials" && (
+							<>
+								<Field>
+									<Label htmlFor="email">Stremio Email</Label>
+									<Input
+										id="email"
+										type="email"
+										placeholder="Enter your Stremio email"
+										value={email}
+										onChange={(e) => setEmail(e.target.value)}
+										disabled={loading}
+									/>
+								</Field>
+								<Field>
+									<Label htmlFor="password">Stremio Password</Label>
+									<Input
+										id="password"
+										type="password"
+										placeholder="Enter your Stremio password"
+										value={password}
+										onChange={(e) => setPassword(e.target.value)}
+										disabled={loading}
+									/>
+								</Field>
+							</>
+						)}
 					</>
 				)}
 
 				{error && <FieldError>{error}</FieldError>}
 
 				<DialogFooter className="flex-col sm:flex-col">
-					<Button
-						onClick={handleInstall}
-						disabled={loading || success}
-						className="w-full text-white transition-all bg-[#5a4cad] hover:bg-[#695dac]"
-					>
-						{loading ? (
-							<>
-								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								Installing Addon...
-							</>
-						) : success ? (
-							<>
-								<Check className="mr-2 h-4 w-4" />
-								Installed Addon Successfully!
-							</>
-						) : (
-							"Install Addon"
-						)}
-					</Button>
+					{https ? (
+						<Button
+							nativeButton={false}
+							render={<Link href={`stremio://${host}/api/manifest.json`} />}
+							className="w-full text-white transition-all bg-[#5a4cad] hover:bg-[#695dac]"
+						>
+							Install Addon
+						</Button>
+					) : (
+						<Button
+							onClick={handleInstall}
+							disabled={loading || success}
+							className="w-full text-white transition-all bg-[#5a4cad] hover:bg-[#695dac]"
+						>
+							{loading ? (
+								<>
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									Installing Addon...
+								</>
+							) : success ? (
+								<>
+									<Check className="mr-2 h-4 w-4" />
+									Installed Addon Successfully!
+								</>
+							) : (
+								"Install Addon"
+							)}
+						</Button>
+					)}
 					<Button
 						variant="outline"
 						onClick={handleCopy}
