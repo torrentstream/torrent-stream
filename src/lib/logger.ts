@@ -1,7 +1,7 @@
 import pino from "pino";
-import { config } from "./config";
+import { deploymentConfig } from "./config";
 
-const { logLevel, dev } = config;
+const { logLevel, dev } = deploymentConfig;
 
 export const logger = pino({
 	level: logLevel,

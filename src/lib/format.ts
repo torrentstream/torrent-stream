@@ -34,7 +34,7 @@ const encodingFormats = new Set([
 	TorrentFormat.Xvid,
 ]);
 
-const formatStrings: { [key in TorrentFormat]: string } = {
+export const formatStrings: { [key in TorrentFormat]: string } = {
 	[TorrentFormat["4K"]]: "4K",
 	[TorrentFormat["1080p"]]: "1080p",
 	[TorrentFormat["720p"]]: "720p",

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { encryptText } from "@/lib/encryption";
 import { getReadableSize } from "@/lib/file";
 import { getFormats, TorrentFormat } from "@/lib/format";
@@ -204,16 +204,14 @@ async function getStreamsFromTorrent(
 }
 
 function isAllowedLanguage(language: string) {
-	const { torrentLanguages } = config;
-	if (torrentLanguages.length === 0) return true;
-	return torrentLanguages.includes(language);
+	const { languages } = getRuntimeConfig().config.search;
+	return languages.includes(language);
 }
 
 function isAllowedFormat(formats: TorrentFormat[]) {
-	const { torrentFormats } = config;
-	if (torrentFormats.length === 0) return true;
+	const { formats: allowedFormats } = getRuntimeConfig().config.search;
 	for (const format of formats) {
-		if (!torrentFormats.includes(format)) {
+		if (!allowedFormats.includes(format)) {
 			return false;
 		}
 	}

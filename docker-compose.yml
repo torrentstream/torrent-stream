@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     volumes:
       - caddy_data:/caddy
+      - torrent_stream_config:/config
+      - torrent_stream_data:/data
     ports:
       - "3000:3000"
       - "443:443"
@@ -21,3 +23,5 @@ services:
 
 volumes:
   caddy_data:
+  torrent_stream_config:
+  torrent_stream_data:

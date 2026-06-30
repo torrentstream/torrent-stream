@@ -27,12 +27,3 @@ export function parseTorrentRequest(value: string): TorrentRequest {
 
 	return { uri: value };
 }
-
-export function isTorrentSeedProviderAllowed(
-	whitelist: string[],
-	provider: string | undefined,
-) {
-	if (!whitelist.length) return true;
-	if (!provider) return false;
-	return whitelist.includes(provider);
-}

@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import makeFetchCookie from "fetch-cookie";
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { isImdbId } from "@/lib/imdb";
 import { logger } from "@/lib/logger";
 import {
@@ -92,7 +92,9 @@ export class InsaneProvider extends TorrentSearchProvider {
 
 				const link = `https://newinsane.info/browse.php?${params.toString()}`;
 				const torrentsPage = await this.fetch(link, {
-					signal: AbortSignal.timeout(config.webRequestTimeout),
+					signal: AbortSignal.timeout(
+						getRuntimeConfig().config.search.requestTimeout,
+					),
 				});
 				const $ = cheerio.load(await torrentsPage.text());
 
@@ -160,7 +162,9 @@ export class InsaneProvider extends TorrentSearchProvider {
 		await this.fetch("https://newinsane.info/login.php", {
 			method: "POST",
 			body: formData,
-			signal: AbortSignal.timeout(config.webRequestTimeout),
+			signal: AbortSignal.timeout(
+				getRuntimeConfig().config.search.requestTimeout,
+			),
 		});
 
 		this.lastLoginCredentials = credentials;
@@ -168,17 +172,15 @@ export class InsaneProvider extends TorrentSearchProvider {
 	}
 
 	private getCredentials() {
-		const { insaneUser, insanePass } = config;
+		const { username, password } = getRuntimeConfig().config.providers.insane;
 
-		if (!insaneUser || !insanePass) {
-			throw new Error(
-				"iNSANE credentials are not set in environment variables",
-			);
+		if (!username || !password) {
+			throw new Error("iNSANE credentials are not configured");
 		}
 
 		return {
-			username: insaneUser,
-			password: insanePass,
+			username,
+			password,
 		};
 	}
 

@@ -1,10 +1,10 @@
 import MemoryChunkStore from "memory-chunk-store";
 import type { FileIterator, Torrent, TorrentFile } from "webtorrent";
-import { config, TorrentStorageMode } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { createLimit } from "@/lib/limit";
 import { logger } from "@/lib/logger";
 import { LRU } from "@/lib/lru";
-import { infoClient, torrentClient } from "./clients";
+import { getInfoClient, getTorrentClient } from "./clients";
 import { registerStream, registerTorrent, type TorrentStream } from "./streams";
 import { TorrentInfo } from "./types";
 
@@ -49,7 +49,7 @@ function fetchTorrentInfo(uri: string) {
 			resolve(info);
 		};
 
-		const torrent = infoClient.add(
+		const torrent = getInfoClient().add(
 			uri,
 			{
 				store: MemoryChunkStore,
@@ -63,7 +63,7 @@ function fetchTorrentInfo(uri: string) {
 			completed = true;
 			torrent.destroy();
 			resolve(undefined);
-		}, config.torrentAddTimeout);
+		}, getRuntimeConfig().config.torrent.addTimeout);
 	});
 }
 
@@ -89,12 +89,12 @@ export function getOrAddTorrent(uri: string, provider?: string) {
 			resolve(torrent);
 		};
 
-		const torrent = torrentClient.add(
+		const torrent = getTorrentClient().add(
 			uri,
 			{
-				...(config.torrentStorageMode === TorrentStorageMode.Memory
+				...(getRuntimeConfig().config.storage.mode === "memory"
 					? { store: MemoryChunkStore }
-					: { path: config.torrentStoragePath }),
+					: { path: getRuntimeConfig().config.storage.path }),
 				destroyStoreOnDestroy: true,
 				deselect: true,
 			},
@@ -106,7 +106,7 @@ export function getOrAddTorrent(uri: string, provider?: string) {
 			completed = true;
 			torrent.destroy();
 			resolve(undefined);
-		}, config.torrentAddTimeout);
+		}, getRuntimeConfig().config.torrent.addTimeout);
 	});
 }
 

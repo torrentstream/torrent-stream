@@ -1,10 +1,10 @@
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import next from "next";
-import { config } from "./lib/config";
+import { deploymentConfig } from "./lib/config";
 import { logger } from "./lib/logger";
 
-const { port, dev } = config;
+const { port, dev } = deploymentConfig;
 const app = next({ dev });
 const handle = app.getRequestHandler();
 

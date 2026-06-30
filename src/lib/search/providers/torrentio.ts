@@ -1,4 +1,5 @@
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
+import { torrentioSourceIds } from "@/lib/config-schema";
 import { logger } from "@/lib/logger";
 import {
 	type StremioStream,
@@ -6,32 +7,6 @@ import {
 	TorrentSearchProvider,
 	TorrentSearchResult,
 } from "@/lib/search/types";
-
-const torrentioProviders = [
-	"yts",
-	"eztv",
-	"rarbg",
-	"1337x",
-	"thepiratebay",
-	"kickasstorrents",
-	"torrentgalaxy",
-	"magnetdl",
-	"horriblesubs",
-	"nyaasi",
-	"tokyotosho",
-	"anidex",
-	"rutor",
-	"rutracker",
-	"comando",
-	"bludv",
-	"micoleaodublado",
-	"torrent9",
-	"ilcorsaronero",
-	"mejortorrent",
-	"wolfmax4k",
-	"cinecalidad",
-	"besttorrents",
-];
 
 export class TorrentioProvider extends TorrentSearchProvider {
 	id = "torrentio";
@@ -75,7 +50,9 @@ export class TorrentioProvider extends TorrentSearchProvider {
 			].join("/");
 
 			const response = await fetch(url, {
-				signal: AbortSignal.timeout(config.webRequestTimeout),
+				signal: AbortSignal.timeout(
+					getRuntimeConfig().config.search.requestTimeout,
+				),
 			});
 			const responseJson = (await response.json()) as {
 				streams: StremioStream[];
@@ -93,12 +70,12 @@ export class TorrentioProvider extends TorrentSearchProvider {
 
 				const tracker =
 					stream.title?.split("⚙️ ")[1]?.split("\n")[0] || "Torrentio";
-				const sourceProvider = torrentioProviders.find(
+				const sourceProvider = torrentioSourceIds.find(
 					(provider) => provider.toLowerCase() === tracker.toLowerCase(),
 				);
-				const provider = this.allProvidersEnabled()
+				const provider = this.aggregateEnabled()
 					? this.id
-					: (sourceProvider ?? tracker.toLowerCase());
+					: (sourceProvider ?? "torrentio-unknown");
 
 				const category = stream.name.split("\n")[1] || undefined;
 
@@ -140,19 +117,22 @@ export class TorrentioProvider extends TorrentSearchProvider {
 	}
 
 	override isEnabled(): boolean {
-		return this.allProvidersEnabled() || this.enabledProviders().length > 0;
+		const torrentio = getRuntimeConfig().config.providers.torrentio;
+		return torrentio.enabled || this.enabledProviders().length > 0;
 	}
 
 	private allProvidersEnabled() {
-		const { torrentProviders } = config;
-		return torrentProviders.includes("torrentio");
+		return this.aggregateEnabled();
 	}
 
 	private enabledProviders() {
-		const { torrentProviders } = config;
-		return torrentioProviders.filter((provider) =>
-			torrentProviders.includes(provider),
-		);
+		if (this.aggregateEnabled()) return [...torrentioSourceIds];
+		const providers = getRuntimeConfig().config.providers;
+		return torrentioSourceIds.filter((provider) => providers[provider].enabled);
+	}
+
+	private aggregateEnabled() {
+		return getRuntimeConfig().config.providers.torrentio.enabled;
 	}
 
 	private parseSize(size: string | undefined) {

@@ -1,4 +1,4 @@
-import { config } from "./config";
+import { getRuntimeConfig } from "./config";
 
 export function isImdbId(str: string) {
 	return /ev\d{7}\/\d{4}(-\d)?|(ch|co|ev|nm|tt)\d{7}/.test(str);
@@ -10,7 +10,9 @@ export async function getTitle(imdbId: string, language?: string) {
 			headers: {
 				"Accept-Language": language || "",
 			},
-			signal: AbortSignal.timeout(config.webRequestTimeout),
+			signal: AbortSignal.timeout(
+				getRuntimeConfig().config.search.requestTimeout,
+			),
 		});
 		const data = await response.text();
 		const title = data.match(/<title>(.*?)<\/title>/)?.[1];

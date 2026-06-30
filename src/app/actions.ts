@@ -1,9 +1,15 @@
 "use server";
 
-import { config, TorrentStorageMode } from "@/lib/config";
+import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config";
+import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config-schema";
 import { getReadableDuration, getReadableSize } from "@/lib/file";
-import { torrentClient } from "@/lib/torrent/clients";
-import { destroyTorrent, getSeedStats } from "@/lib/torrent/streams";
+import { getTorrentClient } from "@/lib/torrent/clients";
+import {
+	applyRuntimeTorrentConfig,
+	destroyTorrent,
+	getSeedStats,
+	getStreams,
+} from "@/lib/torrent/streams";
 import { TorrentInfo } from "@/lib/torrent/types";
 
 export interface TorrentStats {
@@ -43,6 +49,7 @@ export interface TorrentStats {
 }
 
 export async function getTorrents(): Promise<TorrentStats> {
+	const torrentClient = getTorrentClient();
 	return {
 		torrents: torrentClient.torrents
 			.filter((torrent) => torrent.ready)
@@ -88,10 +95,10 @@ export async function getTorrents(): Promise<TorrentStats> {
 						.sort((a, b) => a.path.localeCompare(b.path)),
 				};
 			}),
-		showProgress: config.torrentStorageMode === TorrentStorageMode.File,
+		showProgress: getRuntimeConfig().config.storage.mode === "file",
 		showDeleteFiles:
-			config.torrentStorageMode === TorrentStorageMode.File &&
-			config.torrentKeepFiles,
+			getRuntimeConfig().config.storage.mode === "file" &&
+			getRuntimeConfig().config.storage.keepFiles,
 	};
 }
 
@@ -99,7 +106,58 @@ export async function removeTorrent(
 	infoHash: string,
 	deleteFiles?: boolean,
 ): Promise<void> {
-	const torrent = await torrentClient.get(infoHash);
+	const torrent = await getTorrentClient().get(infoHash);
 	if (!torrent) return;
 	await destroyTorrent(torrent, deleteFiles);
+}
+
+export async function getConfiguration() {
+	return getRuntimeConfig();
+}
+
+export type SaveConfigurationResult =
+	| {
+			requiresConfirmation: true;
+			activeStreams: number;
+			activeTorrents: number;
+	  }
+	| {
+			requiresConfirmation: false;
+			config: RuntimeConfig;
+			revision: string;
+			clientRestarted: boolean;
+			interruptedStreams: number;
+	  };
+
+export async function saveConfiguration(
+	value: unknown,
+	expectedRevision: string,
+	confirmRestart = false,
+): Promise<SaveConfigurationResult> {
+	const next = parseRuntimeConfig(value);
+	const previous = getRuntimeConfig();
+	const storageRestartRequired =
+		previous.config.storage.mode !== next.storage.mode ||
+		previous.config.storage.path !== next.storage.path;
+
+	if (storageRestartRequired && !confirmRestart) {
+		const torrentClient = getTorrentClient();
+		return {
+			requiresConfirmation: true,
+			activeStreams: torrentClient.torrents.reduce(
+				(total, torrent) => total + getStreams(torrent).length,
+				0,
+			),
+			activeTorrents: torrentClient.torrents.length,
+		};
+	}
+
+	const saved = saveRuntimeConfig(next, expectedRevision);
+	const applied = await applyRuntimeTorrentConfig(previous.config);
+	return {
+		requiresConfirmation: false,
+		config: saved.config,
+		revision: saved.revision,
+		...applied,
+	};
 }

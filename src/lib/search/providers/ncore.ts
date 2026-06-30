@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import makeFetchCookie from "fetch-cookie";
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { isImdbId } from "@/lib/imdb";
 import { logger } from "@/lib/logger";
 import {
@@ -84,7 +84,9 @@ export class NcoreProvider extends TorrentSearchProvider {
 
 				const link = `https://ncore.pro/torrents.php?${params.toString()}`;
 				const torrentsPage = await this.fetch(link, {
-					signal: AbortSignal.timeout(config.webRequestTimeout),
+					signal: AbortSignal.timeout(
+						getRuntimeConfig().config.search.requestTimeout,
+					),
 				});
 				const $ = cheerio.load(await torrentsPage.text());
 
@@ -161,7 +163,9 @@ export class NcoreProvider extends TorrentSearchProvider {
 		await this.fetch("https://ncore.pro/login.php", {
 			method: "POST",
 			body: formData,
-			signal: AbortSignal.timeout(config.webRequestTimeout),
+			signal: AbortSignal.timeout(
+				getRuntimeConfig().config.search.requestTimeout,
+			),
 		});
 
 		this.lastLoginCredentials = credentials;
@@ -169,15 +173,15 @@ export class NcoreProvider extends TorrentSearchProvider {
 	}
 
 	private getCredentials() {
-		const { ncoreUser, ncorePass } = config;
+		const { username, password } = getRuntimeConfig().config.providers.ncore;
 
-		if (!ncoreUser || !ncorePass) {
-			throw new Error("nCore credentials are not set in environment variables");
+		if (!username || !password) {
+			throw new Error("nCore credentials are not configured");
 		}
 
 		return {
-			username: ncoreUser,
-			password: ncorePass,
+			username,
+			password,
 		};
 	}
 

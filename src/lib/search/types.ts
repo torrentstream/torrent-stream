@@ -1,4 +1,4 @@
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { getEpisodeNumber } from "@/lib/episode";
 import { getReadableSize } from "@/lib/file";
 import { getFormats } from "@/lib/format";
@@ -120,8 +120,9 @@ export abstract class TorrentSearchProvider {
 	): Promise<TorrentSearchResult[]>;
 
 	isEnabled() {
-		const { torrentProviders } = config;
-		if (torrentProviders.length === 0) return true;
-		return torrentProviders.includes(this.id);
+		const providers = getRuntimeConfig().config.providers;
+		if (this.id === "ncore") return providers.ncore.enabled;
+		if (this.id === "insane") return providers.insane.enabled;
+		return false;
 	}
 }

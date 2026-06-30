@@ -1,5 +1,5 @@
 import type { ChunkStore, Torrent } from "webtorrent";
-import { config } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { LRU } from "@/lib/lru";
 import { getStreams } from "./streams";
@@ -88,7 +88,7 @@ export class TorrentStreamChunkStore implements ChunkStore {
 		const streamCount = getStreams(this.torrent).length;
 
 		const chunksPerStream = Math.floor(
-			config.streamMemoryLimit / this.chunkLength,
+			getRuntimeConfig().config.storage.streamMemoryLimit / this.chunkLength,
 		);
 
 		const capacity = (streamCount || 1) * chunksPerStream;

@@ -8,14 +8,23 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { Torrent, TorrentFile } from "webtorrent";
-import { config, TorrentStorageMode } from "@/lib/config";
+import { deploymentConfig, getRuntimeConfig } from "@/lib/config";
+import {
+	getSeedPolicy,
+	type RuntimeConfig,
+	type SeedPolicy,
+} from "@/lib/config-schema";
 import { logger } from "@/lib/logger";
 import { LRU } from "@/lib/lru";
-import { torrentClient } from "./clients";
-import { isTorrentSeedProviderAllowed } from "./request";
+import {
+	applyTransferLimits,
+	getTorrentClient,
+	restartTorrentClients,
+} from "./clients";
 import { TorrentStreamChunkStore } from "./store";
 
 interface TorrentData {
+	provider?: string;
 	streams: Map<string, TorrentStream>;
 	speeds: LRU<number, { date: Date; upload: number; download: number }>;
 	removalTimeout?: NodeJS.Timeout;
@@ -49,39 +58,36 @@ interface TrackerAnnounceEmitter {
 declare global {
 	var torrentDataMap: Map<Torrent, TorrentData> | undefined;
 	var seedRecordsMap: Record<string, SeedRecord> | undefined;
+	var torrentStatsInterval: NodeJS.Timeout | undefined;
+	var torrentShutdownHandlersRegistered: boolean | undefined;
 }
 
-const seedTimeEnabled =
-	config.torrentSeedTime > 0 ||
-	(config.torrentSeedTimeIncrement > 0 &&
-		config.torrentSeedTimeIncrementBytes > 0);
-
-const seedingEnabled =
-	config.torrentStorageMode === TorrentStorageMode.File &&
-	(config.torrentSeedRatio > 0 || seedTimeEnabled);
-
-const stateFile = join(config.torrentStatePath, "torrents.json");
-
+const stateFile = join(deploymentConfig.configPath, "torrents.json");
 let seedRecordsDirty = false;
 let lastSeedFlush = 0;
 
 function metainfoFile(infoHash: string) {
-	return join(config.torrentStatePath, `${infoHash}.torrent`);
+	return join(deploymentConfig.configPath, `${infoHash}.torrent`);
 }
 
 function loadSeedRecords(): Record<string, SeedRecord> {
 	if (!existsSync(stateFile)) return {};
 	try {
 		const parsed = JSON.parse(readFileSync(stateFile, "utf8"));
-		if (typeof parsed !== "object" || parsed === null) {
+		if (
+			typeof parsed !== "object" ||
+			parsed === null ||
+			Array.isArray(parsed)
+		) {
 			throw new Error("Seed state is not an object");
 		}
 		return parsed;
 	} catch (error) {
 		logger.error(error);
-		logger.warn(`Seed state is corrupted, starting fresh: ${stateFile}`);
+		const backup = `${stateFile}.invalid-${Date.now()}`;
+		logger.warn(`Seed state is corrupted, moving it to ${backup}`);
 		try {
-			renameSync(stateFile, `${stateFile}.bak`);
+			renameSync(stateFile, backup);
 		} catch (renameError) {
 			logger.error(renameError);
 		}
@@ -94,7 +100,7 @@ function flushSeedRecords(force = false) {
 	if (!force && Date.now() - lastSeedFlush < 15 * 1000) return;
 	lastSeedFlush = Date.now();
 	try {
-		mkdirSync(config.torrentStatePath, { recursive: true });
+		mkdirSync(deploymentConfig.configPath, { recursive: true });
 		writeFileSync(`${stateFile}.tmp`, JSON.stringify(seedRecords, null, "\t"));
 		renameSync(`${stateFile}.tmp`, stateFile);
 		seedRecordsDirty = false;
@@ -103,15 +109,16 @@ function flushSeedRecords(force = false) {
 	}
 }
 
-if (!global.torrentDataMap) {
-	const map = new Map<Torrent, TorrentData>();
+if (!global.torrentDataMap) global.torrentDataMap = new Map();
+if (!global.seedRecordsMap) global.seedRecordsMap = loadSeedRecords();
 
-	global.torrentDataMap = map;
-	global.seedRecordsMap = seedingEnabled ? loadSeedRecords() : {};
+const torrentData = global.torrentDataMap;
+const seedRecords = global.seedRecordsMap;
 
-	setInterval(() => {
-		torrentClient.torrents.forEach((torrent) => {
-			const data = map.get(torrent);
+if (!global.torrentStatsInterval) {
+	global.torrentStatsInterval = setInterval(() => {
+		getTorrentClient().torrents.forEach((torrent) => {
+			const data = torrentData.get(torrent);
 			if (!data) return;
 			const now = new Date();
 			data.speeds.put(now.getTime(), {
@@ -123,21 +130,35 @@ if (!global.torrentDataMap) {
 		});
 		flushSeedRecords();
 	}, 1000);
-
-	if (seedingEnabled) {
-		const shutdown = () => {
-			flushSeedRecords(true);
-			process.exit(0);
-		};
-		process.once("SIGTERM", shutdown);
-		process.once("SIGINT", shutdown);
-	} else if (config.torrentSeedRatio > 0 || seedTimeEnabled) {
-		logger.warn("Seed requirements are ignored in memory storage mode");
-	}
 }
 
-const torrentData = global.torrentDataMap;
-const seedRecords = global.seedRecordsMap ?? {};
+if (!global.torrentShutdownHandlersRegistered) {
+	global.torrentShutdownHandlersRegistered = true;
+	const shutdown = () => {
+		flushSeedRecords(true);
+		process.exit(0);
+	};
+	process.once("SIGTERM", shutdown);
+	process.once("SIGINT", shutdown);
+}
+
+function currentPolicy(provider: string | undefined) {
+	return getSeedPolicy(getRuntimeConfig().config, provider);
+}
+
+function isSeedingEnabled(provider: string | undefined) {
+	return (
+		getRuntimeConfig().config.storage.mode === "file" &&
+		currentPolicy(provider)?.enabled === true
+	);
+}
+
+function hasTimeTarget(policy: SeedPolicy) {
+	return (
+		policy.timeSeconds > 0 ||
+		(policy.timeIncrementSeconds > 0 && policy.timeIncrementBytes > 0)
+	);
+}
 
 export class TorrentStream {
 	id: string;
@@ -154,7 +175,7 @@ export class TorrentStream {
 		clearTimeout(this.timeout);
 		this.timeout = setTimeout(() => {
 			unregisterStream(this.id, this.torrent);
-		}, config.torrentIdleTimeout);
+		}, getRuntimeConfig().config.torrent.idleTimeout);
 	}
 }
 
@@ -198,9 +219,12 @@ function initSeedState(
 		};
 		seedRecords[torrent.infoHash] = record;
 		seedRecordsDirty = true;
+	} else if (provider && record.provider !== provider) {
+		record.provider = provider;
+		seedRecordsDirty = true;
 	}
 	try {
-		mkdirSync(config.torrentStatePath, { recursive: true });
+		mkdirSync(deploymentConfig.configPath, { recursive: true });
 		if (!existsSync(metainfoFile(torrent.infoHash))) {
 			writeFileSync(metainfoFile(torrent.infoHash), torrent.torrentFile);
 		}
@@ -217,18 +241,18 @@ function initSeedState(
 	};
 }
 
-function requiredSeedSeconds(uploaded: number, downloaded: number) {
-	let required = config.torrentSeedTime;
-	if (
-		config.torrentSeedTimeIncrement > 0 &&
-		config.torrentSeedTimeIncrementBytes > 0
-	) {
+function requiredSeedSeconds(
+	policy: SeedPolicy,
+	uploaded: number,
+	downloaded: number,
+) {
+	let required = policy.timeSeconds;
+	if (policy.timeIncrementSeconds > 0 && policy.timeIncrementBytes > 0) {
 		required +=
-			(config.torrentSeedTimeIncrement * downloaded) /
-			config.torrentSeedTimeIncrementBytes;
+			(policy.timeIncrementSeconds * downloaded) / policy.timeIncrementBytes;
 	}
-	if (config.torrentSeedTimeRatioDiscount) {
-		const target = config.torrentSeedRatio > 0 ? config.torrentSeedRatio : 1;
+	if (policy.ratioDiscount) {
+		const target = policy.ratio > 0 ? policy.ratio : 1;
 		const ratio = downloaded > 0 ? uploaded / downloaded : target;
 		required *= 1 - Math.min(ratio, target) / target;
 	}
@@ -238,39 +262,84 @@ function requiredSeedSeconds(uploaded: number, downloaded: number) {
 function isSeedingComplete(torrent: Torrent) {
 	const seed = torrentData.get(torrent)?.seed;
 	if (!seed) return true;
+	const record = seedRecords[torrent.infoHash];
+	const policy = currentPolicy(record?.provider);
+	if (!policy?.enabled) return false;
 	const { uploaded, downloaded } = seedTotals(torrent, seed);
+	if (policy.ratio > 0 && uploaded >= downloaded * policy.ratio) return true;
 	if (
-		config.torrentSeedRatio > 0 &&
-		uploaded >= downloaded * config.torrentSeedRatio
-	) {
-		return true;
-	}
-	if (
-		seedTimeEnabled &&
-		seed.seedSeconds >= requiredSeedSeconds(uploaded, downloaded)
+		hasTimeTarget(policy) &&
+		seed.seedSeconds >= requiredSeedSeconds(policy, uploaded, downloaded)
 	) {
 		return true;
 	}
 	return false;
 }
 
-export function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
+function dropSeedRecord(infoHash: string) {
+	delete seedRecords[infoHash];
+	seedRecordsDirty = true;
+	try {
+		if (existsSync(metainfoFile(infoHash))) unlinkSync(metainfoFile(infoHash));
+	} catch (error) {
+		logger.error(error);
+	}
+	flushSeedRecords(true);
+}
+
+function unregisterTorrent(torrent: Torrent, preserveSeedState: boolean) {
+	const data = torrentData.get(torrent);
+	if (data) {
+		clearTimeout(data.removalTimeout);
+		data.streams.forEach((stream) => {
+			clearTimeout(stream.timeout);
+		});
+		torrentData.delete(torrent);
+	}
+	if (!preserveSeedState && seedRecords[torrent.infoHash]) {
+		dropSeedRecord(torrent.infoHash);
+	}
+	logger.info(
+		`${preserveSeedState ? "Torrent suspended" : "Torrent removed"}: ${torrent.name} (${torrent.infoHash})`,
+	);
+	runGarbageCollection("A torrent was removed");
+}
+
+async function destroyTorrentInternal(
+	torrent: Torrent,
+	options: {
+		deleteFiles?: boolean;
+		preserveSeedState?: boolean;
+		forceDestroyStore?: boolean;
+	} = {},
+) {
+	const data = torrentData.get(torrent);
+	if (data?.seed) updateSeedRecord(torrent, data);
+	flushSeedRecords(true);
+	const storage = getRuntimeConfig().config.storage;
 	const destroyStore =
-		config.torrentStorageMode === TorrentStorageMode.File
-			? (deleteFiles ?? !config.torrentKeepFiles)
-			: true;
+		options.forceDestroyStore ??
+		(storage.mode === "file"
+			? options.preserveSeedState
+				? false
+				: (options.deleteFiles ?? !storage.keepFiles)
+			: true);
 	return new Promise<void>((resolve) => {
 		if (torrent.destroyed) {
-			unregisterTorrent(torrent);
+			unregisterTorrent(torrent, options.preserveSeedState ?? false);
 			resolve();
 			return;
 		}
 		torrent.destroy({ destroyStore }, (error) => {
 			if (error) logger.error(error);
-			unregisterTorrent(torrent);
+			unregisterTorrent(torrent, options.preserveSeedState ?? false);
 			resolve();
 		});
 	});
+}
+
+export function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
+	return destroyTorrentInternal(torrent, { deleteFiles });
 }
 
 function scheduleRemoval(torrent: Torrent) {
@@ -279,46 +348,52 @@ function scheduleRemoval(torrent: Torrent) {
 	clearTimeout(data.removalTimeout);
 	data.removalTimeout = setTimeout(() => {
 		if (torrent.destroyed) {
-			unregisterTorrent(torrent);
+			unregisterTorrent(torrent, Boolean(seedRecords[torrent.infoHash]));
 			return;
 		}
-		if (data.streams.size > 0) {
-			logger.debug(`Removal cancelled: ${torrent.name} (${torrent.infoHash})`);
-			return;
-		}
+		if (data.streams.size > 0) return;
+		const preserveSeedState = Boolean(seedRecords[torrent.infoHash]);
 		logger.debug(
-			`Removing idle torrent: ${torrent.name} (${torrent.infoHash})`,
+			`${preserveSeedState ? "Suspending" : "Removing"} idle torrent: ${torrent.name} (${torrent.infoHash})`,
 		);
-		destroyTorrent(torrent);
-	}, config.torrentRemoveTimeout);
+		void destroyTorrentInternal(torrent, { preserveSeedState });
+	}, getRuntimeConfig().config.torrent.removeTimeout);
 }
 
 function checkSeedRequirements(torrent: Torrent) {
 	const data = torrentData.get(torrent);
 	if (!data?.seed || data.streams.size > 0) return;
-	if (!isSeedingComplete(torrent)) {
-		logger.debug(`Seeding: ${torrent.name} (${torrent.infoHash})`);
+	const record = seedRecords[torrent.infoHash];
+	if (!isSeedingEnabled(record?.provider)) {
+		updateSeedRecord(torrent, data);
+		data.seed = undefined;
+		void destroyTorrentInternal(torrent, { preserveSeedState: true });
 		return;
 	}
+	if (!isSeedingComplete(torrent)) return;
 	logger.debug(
 		`Removing seeded torrent: ${torrent.name} (${torrent.infoHash})`,
 	);
-	destroyTorrent(torrent);
+	void destroyTorrentInternal(torrent);
 }
 
 export function getSeedStats(torrent: Torrent) {
 	const data = torrentData.get(torrent);
 	if (!data?.seed) return undefined;
+	const record = seedRecords[torrent.infoHash];
+	const policy = currentPolicy(record?.provider);
+	if (!policy) return undefined;
 	const { uploaded, downloaded } = seedTotals(torrent, data.seed);
 	return {
 		seeding: data.streams.size === 0 && !isSeedingComplete(torrent),
 		uploaded,
 		downloaded,
 		ratio: downloaded > 0 ? uploaded / downloaded : 0,
-		secondsRemaining: seedTimeEnabled
+		secondsRemaining: hasTimeTarget(policy)
 			? Math.max(
 					0,
-					requiredSeedSeconds(uploaded, downloaded) - data.seed.seedSeconds,
+					requiredSeedSeconds(policy, uploaded, downloaded) -
+						data.seed.seedSeconds,
 				)
 			: undefined,
 	};
@@ -326,19 +401,17 @@ export function getSeedStats(torrent: Torrent) {
 
 export function registerTorrent(torrent: Torrent, provider?: string) {
 	if (torrentData.has(torrent)) return;
-	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
+	const storageMode = getRuntimeConfig().config.storage.mode;
+	if (storageMode === "memory")
 		torrent.store = new TorrentStreamChunkStore(torrent);
-	}
 	const seed =
-		seedingEnabled &&
-		isTorrentSeedProviderAllowed(config.torrentSeedProviderWhitelist, provider)
+		storageMode === "file" && isSeedingEnabled(provider)
 			? initSeedState(torrent, provider)
 			: undefined;
 	torrentData.set(torrent, {
-		streams: new Map<string, TorrentStream>(),
-		speeds: new LRU<number, { date: Date; upload: number; download: number }>(
-			300,
-		),
+		provider,
+		streams: new Map(),
+		speeds: new LRU(300),
 		seed,
 		streamedFiles: new Set(seedRecords[torrent.infoHash]?.files ?? []),
 	});
@@ -348,30 +421,6 @@ export function registerTorrent(torrent: Torrent, provider?: string) {
 	logger.info(`Torrent added: ${torrent.name} (${torrent.infoHash})`);
 }
 
-export function unregisterTorrent(torrent: Torrent) {
-	const data = torrentData.get(torrent);
-	if (!data) return;
-	clearTimeout(data.removalTimeout);
-	data.streams.forEach((stream) => {
-		clearTimeout(stream.timeout);
-	});
-	torrentData.delete(torrent);
-	if (data.seed) {
-		delete seedRecords[torrent.infoHash];
-		seedRecordsDirty = true;
-		try {
-			if (existsSync(metainfoFile(torrent.infoHash))) {
-				unlinkSync(metainfoFile(torrent.infoHash));
-			}
-		} catch (error) {
-			logger.error(error);
-		}
-		flushSeedRecords(true);
-	}
-	logger.info(`Torrent removed: ${torrent.name} (${torrent.infoHash})`);
-	runGarbageCollection("A torrent was removed");
-}
-
 export function registerStream(
 	id: string,
 	torrent: Torrent,
@@ -379,25 +428,18 @@ export function registerStream(
 ) {
 	const data = torrentData.get(torrent);
 	if (!data) throw new Error("Torrent not registered");
-
 	let stream = data.streams.get(id);
 	if (!stream) {
 		clearTimeout(data.removalTimeout);
 		data.removalTimeout = undefined;
-
 		stream = new TorrentStream(id, torrent);
 		data.streams.set(id, stream);
-
 		logger.info(`Stream started: ${torrent.name} (${id})`);
-
-		if (config.torrentStorageMode === TorrentStorageMode.Memory) {
-			const store = torrent.store as TorrentStreamChunkStore;
-			store.refreshCapacity();
+		if (getRuntimeConfig().config.storage.mode === "memory") {
+			(torrent.store as TorrentStreamChunkStore).refreshCapacity();
 		}
 	}
-
 	stream.files.set(file.path, file);
-
 	if (!data.streamedFiles.has(file.path)) {
 		data.streamedFiles.add(file.path);
 		const record = seedRecords[torrent.infoHash];
@@ -407,37 +449,32 @@ export function registerStream(
 			flushSeedRecords(true);
 		}
 	}
-
 	return stream;
 }
 
 export function unregisterStream(id: string, torrent: Torrent) {
 	const data = torrentData.get(torrent);
 	if (!data) return;
-
 	const stream = data.streams.get(id);
 	if (!stream) return;
-
 	clearTimeout(stream.timeout);
 	data.streams.delete(id);
-
 	logger.info(`Stream ended: ${torrent.name} (${id})`);
-
-	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
-		const store = torrent.store as TorrentStreamChunkStore;
-		store.refreshCapacity();
+	if (getRuntimeConfig().config.storage.mode === "memory") {
+		(torrent.store as TorrentStreamChunkStore).refreshCapacity();
 	}
-
-	if (getStreams(torrent).length === 0) {
+	if (data.streams.size === 0) {
 		schedulePause(torrent);
-		scheduleRemoval(torrent);
+		if (data.seed) checkSeedRequirements(torrent);
+		else scheduleRemoval(torrent);
 	}
 }
 
 export function schedulePause(torrent: Torrent) {
-	if (config.torrentStorageMode !== TorrentStorageMode.File) return;
+	const storage = getRuntimeConfig().config.storage;
+	if (storage.mode !== "file") return;
 	torrent._selections.clear();
-	if (config.torrentIdleDownload) {
+	if (storage.idleDownload) {
 		const streamed = getStreamedFiles(torrent);
 		for (const file of torrent.files) {
 			if (streamed.has(file.path)) file.select();
@@ -474,35 +511,13 @@ function runGarbageCollection(reason: string) {
 	logger.debug(`GC triggered: ${reason}`);
 }
 
-function dropSeedRecord(infoHash: string) {
-	delete seedRecords[infoHash];
-	seedRecordsDirty = true;
-	try {
-		if (existsSync(metainfoFile(infoHash))) {
-			unlinkSync(metainfoFile(infoHash));
-		}
-	} catch (error) {
-		logger.error(error);
-	}
-	flushSeedRecords(true);
-}
-
-export function resumeSeedingTorrents() {
-	if (!seedingEnabled) return;
+export async function resumeSeedingTorrents() {
+	if (getRuntimeConfig().config.storage.mode !== "file") return;
+	const torrentClient = getTorrentClient();
 	for (const infoHash of Object.keys(seedRecords)) {
 		const record = seedRecords[infoHash];
-		if (
-			!isTorrentSeedProviderAllowed(
-				config.torrentSeedProviderWhitelist,
-				record.provider,
-			)
-		) {
-			logger.info(
-				`Seed provider is not allowed, dropping seed record: ${infoHash}`,
-			);
-			dropSeedRecord(infoHash);
-			continue;
-		}
+		if (!isSeedingEnabled(record.provider)) continue;
+		if (await torrentClient.get(infoHash)) continue;
 		let metainfo: Buffer;
 		try {
 			metainfo = readFileSync(metainfoFile(infoHash));
@@ -514,7 +529,7 @@ export function resumeSeedingTorrents() {
 		const torrent = torrentClient.add(
 			metainfo,
 			{
-				path: config.torrentStoragePath,
+				path: getRuntimeConfig().config.storage.path,
 				destroyStoreOnDestroy: true,
 				deselect: true,
 			},
@@ -525,9 +540,74 @@ export function resumeSeedingTorrents() {
 			},
 		);
 		torrent.once("error", () => {
-			logger.warn(`Resume failed, dropping seed record: ${infoHash}`);
-			dropSeedRecord(infoHash);
+			logger.warn(`Resume failed, preserving seed record: ${infoHash}`);
 		});
 	}
 	flushSeedRecords(true);
+}
+
+async function suspendAllTorrents(
+	previousMode: RuntimeConfig["storage"]["mode"],
+) {
+	const torrentClient = getTorrentClient();
+	const torrents = [...torrentClient.torrents];
+	const interruptedStreams = torrents.reduce(
+		(total, torrent) => total + (torrentData.get(torrent)?.streams.size ?? 0),
+		0,
+	);
+	await Promise.all(
+		torrents.map((torrent) =>
+			destroyTorrentInternal(torrent, {
+				preserveSeedState: true,
+				forceDestroyStore: previousMode === "memory",
+			}),
+		),
+	);
+	return interruptedStreams;
+}
+
+export async function applyRuntimeTorrentConfig(previous: RuntimeConfig) {
+	const current = getRuntimeConfig().config;
+	if (
+		previous.storage.mode !== current.storage.mode ||
+		previous.storage.path !== current.storage.path
+	) {
+		const interruptedStreams = await suspendAllTorrents(previous.storage.mode);
+		await restartTorrentClients();
+		await resumeSeedingTorrents();
+		return { interruptedStreams, clientRestarted: true };
+	}
+
+	applyTransferLimits();
+	const operations: Promise<void>[] = [];
+	const torrentClient = getTorrentClient();
+	for (const torrent of [...torrentClient.torrents]) {
+		const data = torrentData.get(torrent);
+		if (!data) continue;
+		for (const stream of data.streams.values()) stream.refreshTimeout();
+		if (current.storage.mode === "memory") {
+			(torrent.store as TorrentStreamChunkStore).refreshCapacity();
+		} else {
+			if (data.streams.size === 0) schedulePause(torrent);
+			const enabled = isSeedingEnabled(data.provider);
+			if (enabled && !data.seed) {
+				data.seed = initSeedState(torrent, data.provider);
+			} else if (!enabled && data.seed) {
+				updateSeedRecord(torrent, data);
+				data.seed = undefined;
+				if (data.streams.size === 0) {
+					operations.push(
+						destroyTorrentInternal(torrent, { preserveSeedState: true }),
+					);
+					continue;
+				}
+			}
+			if (data.seed) checkSeedRequirements(torrent);
+		}
+		if (!data.seed && data.streams.size === 0) scheduleRemoval(torrent);
+	}
+	await Promise.all(operations);
+	await resumeSeedingTorrents();
+	flushSeedRecords(true);
+	return { interruptedStreams: 0, clientRestarted: false };
 }

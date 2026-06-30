@@ -5,12 +5,14 @@ import {
 	randomBytes,
 } from "node:crypto";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
-import { config } from "./config";
+import { deploymentConfig } from "./config";
 
 const algorithm = "aes-256-cbc";
 const ivLength = 16;
 
-const key = createHash("sha256").update(config.encryptionKey).digest();
+const key = createHash("sha256")
+	.update(deploymentConfig.encryptionKey)
+	.digest();
 
 export const encryptText = (text: string): string => {
 	const compressed = brotliCompressSync(text);
