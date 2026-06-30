@@ -121,6 +121,7 @@ export class InsaneProvider extends TorrentSearchProvider {
 							seeds,
 							peers,
 							torrent,
+							provider: this.id,
 						}),
 					);
 				}

@@ -67,7 +67,7 @@ function fetchTorrentInfo(uri: string) {
 	});
 }
 
-export function getOrAddTorrent(uri: string) {
+export function getOrAddTorrent(uri: string, provider?: string) {
 	return new Promise<Torrent | undefined>((resolve) => {
 		let completed = false;
 
@@ -85,7 +85,7 @@ export function getOrAddTorrent(uri: string) {
 			}
 			completed = true;
 			clearTimeout(timeout);
-			registerTorrent(torrent);
+			registerTorrent(torrent, provider);
 			resolve(torrent);
 		};
 

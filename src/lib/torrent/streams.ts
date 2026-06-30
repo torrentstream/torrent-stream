@@ -12,6 +12,7 @@ import { config, TorrentStorageMode } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { LRU } from "@/lib/lru";
 import { torrentClient } from "./clients";
+import { isTorrentSeedProviderAllowed } from "./request";
 import { TorrentStreamChunkStore } from "./store";
 
 interface TorrentData {
@@ -38,6 +39,7 @@ interface SeedRecord {
 	seedSeconds: number;
 	addedAt: string;
 	files: string[];
+	provider?: string;
 }
 
 interface TrackerAnnounceEmitter {
@@ -178,7 +180,10 @@ function updateSeedRecord(torrent: Torrent, data: TorrentData) {
 	seedRecordsDirty = true;
 }
 
-function initSeedState(torrent: Torrent): SeedState {
+function initSeedState(
+	torrent: Torrent,
+	provider: string | undefined,
+): SeedState {
 	let record = seedRecords[torrent.infoHash];
 	if (!record) {
 		record = {
@@ -189,6 +194,7 @@ function initSeedState(torrent: Torrent): SeedState {
 			seedSeconds: 0,
 			addedAt: new Date().toISOString(),
 			files: [],
+			provider,
 		};
 		seedRecords[torrent.infoHash] = record;
 		seedRecordsDirty = true;
@@ -318,12 +324,16 @@ export function getSeedStats(torrent: Torrent) {
 	};
 }
 
-export function registerTorrent(torrent: Torrent) {
+export function registerTorrent(torrent: Torrent, provider?: string) {
 	if (torrentData.has(torrent)) return;
 	if (config.torrentStorageMode === TorrentStorageMode.Memory) {
 		torrent.store = new TorrentStreamChunkStore(torrent);
 	}
-	const seed = seedingEnabled ? initSeedState(torrent) : undefined;
+	const seed =
+		seedingEnabled &&
+		isTorrentSeedProviderAllowed(config.torrentSeedProviderWhitelist, provider)
+			? initSeedState(torrent, provider)
+			: undefined;
 	torrentData.set(torrent, {
 		streams: new Map<string, TorrentStream>(),
 		speeds: new LRU<number, { date: Date; upload: number; download: number }>(
@@ -480,6 +490,19 @@ function dropSeedRecord(infoHash: string) {
 export function resumeSeedingTorrents() {
 	if (!seedingEnabled) return;
 	for (const infoHash of Object.keys(seedRecords)) {
+		const record = seedRecords[infoHash];
+		if (
+			!isTorrentSeedProviderAllowed(
+				config.torrentSeedProviderWhitelist,
+				record.provider,
+			)
+		) {
+			logger.info(
+				`Seed provider is not allowed, dropping seed record: ${infoHash}`,
+			);
+			dropSeedRecord(infoHash);
+			continue;
+		}
 		let metainfo: Buffer;
 		try {
 			metainfo = readFileSync(metainfoFile(infoHash));
@@ -496,7 +519,7 @@ export function resumeSeedingTorrents() {
 				deselect: true,
 			},
 			(torrent) => {
-				registerTorrent(torrent);
+				registerTorrent(torrent, record.provider);
 				schedulePause(torrent);
 				logger.info(`Seeding resumed: ${torrent.name} (${torrent.infoHash})`);
 			},

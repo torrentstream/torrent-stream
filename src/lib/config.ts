@@ -52,7 +52,14 @@ export const config = {
 	torrentIdleTimeout: Number(process.env.TORRENT_IDLE_TIMEOUT) || 60 * 1000,
 	torrentRemoveTimeout:
 		Number(process.env.TORRENT_REMOVE_TIMEOUT) || 5 * 60 * 1000,
-	torrentProviders: process.env.TORRENT_PROVIDERS?.split(",") ?? [],
+	torrentProviders:
+		process.env.TORRENT_PROVIDERS?.split(",")
+			.map((provider) => provider.trim())
+			.filter(Boolean) ?? [],
+	torrentSeedProviderWhitelist:
+		process.env.TORRENT_SEED_PROVIDER_WHITELIST?.split(",")
+			.map((provider) => provider.trim())
+			.filter(Boolean) ?? [],
 	torrentFormats: (process.env.TORRENT_FORMATS?.split(",")
 		.map((format) => tryParseEnum(TorrentFormat, format, TorrentFormat.Unknown))
 		.filter(Boolean) as TorrentFormat[]) ?? [

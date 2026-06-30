@@ -3,6 +3,7 @@ import { config, TorrentStorageMode } from "@/lib/config";
 import { decryptText } from "@/lib/encryption";
 import { getStreamingMimeType } from "@/lib/file";
 import { getOrAddTorrent, getReadableStream } from "@/lib/torrent";
+import { parseTorrentRequest } from "@/lib/torrent/request";
 
 export async function GET(
 	request: NextRequest,
@@ -20,14 +21,17 @@ export async function GET(
 		return NextResponse.json({ error: "Missing file index." }, { status: 400 });
 	}
 
-	let decryptedUri: string;
+	let torrentRequest: ReturnType<typeof parseTorrentRequest>;
 	try {
-		decryptedUri = decryptText(uri);
+		torrentRequest = parseTorrentRequest(decryptText(uri));
 	} catch {
 		return NextResponse.json({ error: "Invalid stream URL." }, { status: 400 });
 	}
 
-	const torrent = await getOrAddTorrent(decryptedUri);
+	const torrent = await getOrAddTorrent(
+		torrentRequest.uri,
+		torrentRequest.provider,
+	);
 	if (!torrent) {
 		return NextResponse.json(
 			{ error: "Failed to add torrent." },

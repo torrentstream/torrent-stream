@@ -122,6 +122,7 @@ export class NcoreProvider extends TorrentSearchProvider {
 							seeds,
 							peers,
 							torrent,
+							provider: this.id,
 						}),
 					);
 				}

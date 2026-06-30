@@ -93,6 +93,12 @@ export class TorrentioProvider extends TorrentSearchProvider {
 
 				const tracker =
 					stream.title?.split("⚙️ ")[1]?.split("\n")[0] || "Torrentio";
+				const sourceProvider = torrentioProviders.find(
+					(provider) => provider.toLowerCase() === tracker.toLowerCase(),
+				);
+				const provider = this.allProvidersEnabled()
+					? this.id
+					: (sourceProvider ?? tracker.toLowerCase());
 
 				const category = stream.name.split("\n")[1] || undefined;
 
@@ -122,6 +128,7 @@ export class TorrentioProvider extends TorrentSearchProvider {
 						size,
 						seeds,
 						magnet,
+						provider,
 					}),
 				);
 			}

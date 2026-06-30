@@ -5,6 +5,7 @@ import { getReadableSize } from "@/lib/file";
 import { getFormats, TorrentFormat } from "@/lib/format";
 import { logger } from "@/lib/logger";
 import { getTorrentInfo } from "@/lib/torrent";
+import { serializeTorrentRequest } from "@/lib/torrent/request";
 import type { TorrentInfo } from "@/lib/torrent/types";
 import { InsaneProvider } from "./providers/insane";
 import { NcoreProvider } from "./providers/ncore";
@@ -117,7 +118,14 @@ async function getStreamsFromTorrent(
 
 	if (!info) return [];
 
-	const uriSegment = encodeURIComponent(encryptText(uri));
+	const uriSegment = encodeURIComponent(
+		encryptText(
+			serializeTorrentRequest({
+				uri,
+				provider: torrent.provider,
+			}),
+		),
+	);
 
 	const {
 		formats: torrentFormats,

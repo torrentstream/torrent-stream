@@ -44,6 +44,7 @@ type TorrentSearchResultParams = Pick<
 	| "peers"
 	| "torrent"
 	| "magnet"
+	| "provider"
 >;
 
 export class TorrentSearchResult {
@@ -60,6 +61,7 @@ export class TorrentSearchResult {
 	peers?: number;
 	torrent?: string;
 	magnet?: string;
+	provider: string;
 
 	constructor(params: TorrentSearchResultParams) {
 		this.name = params.name;
@@ -75,6 +77,7 @@ export class TorrentSearchResult {
 		this.peers = params.peers;
 		this.torrent = params.torrent;
 		this.magnet = params.magnet;
+		this.provider = params.provider;
 	}
 
 	get language() {
