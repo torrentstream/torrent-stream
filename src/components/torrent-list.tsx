@@ -34,7 +34,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { getReadableSize } from "@/lib/file";
+import { getReadableSpeed, roundSpeed } from "@/lib/file";
 import { FlipNumber } from "./flip-number";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -111,9 +111,13 @@ function TorrentCard({
 
 	const interval = 5;
 	const maxPoints = 60;
-	const chartData = torrent.historicalSpeeds.filter(
-		(value) => value.date.getSeconds() % interval === 0,
-	);
+	const chartData = torrent.historicalSpeeds
+		.filter((value) => value.date.getSeconds() % interval === 0)
+		.map(({ date, download, upload }) => ({
+			date,
+			download: roundSpeed(download),
+			upload: roundSpeed(upload),
+		}));
 	let lastDate = chartData[chartData.length - 1]?.date ?? new Date();
 	while (chartData.length < maxPoints) {
 		lastDate = new Date(lastDate.getTime() + interval * 1000);
@@ -283,7 +287,7 @@ function TorrentCard({
 								if (!date || date > new Date()) return null;
 								const formattedPayload = payload.map((entry) => ({
 									...entry,
-									value: `${getReadableSize(entry.value as number)}/s`,
+									value: getReadableSpeed(entry.value as number),
 								}));
 								return (
 									<ChartTooltipContent

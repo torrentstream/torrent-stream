@@ -3,6 +3,7 @@ import { getEpisodeNumber } from "@/lib/episode";
 import {
 	getReadableProgress,
 	getReadableSize,
+	getReadableSpeed,
 	isSubtitleFile,
 	isVideoFile,
 } from "@/lib/file";
@@ -41,9 +42,9 @@ export class TorrentInfo {
 		this.uploaded = torrent.uploaded;
 		this.readableUploaded = getReadableSize(this.uploaded);
 		this.downloadSpeed = torrent.downloadSpeed;
-		this.readableDownloadSpeed = `${getReadableSize(this.downloadSpeed)}/s`;
+		this.readableDownloadSpeed = getReadableSpeed(this.downloadSpeed);
 		this.uploadSpeed = torrent.uploadSpeed;
-		this.readableUploadSpeed = `${getReadableSize(this.uploadSpeed)}/s`;
+		this.readableUploadSpeed = getReadableSpeed(this.uploadSpeed);
 		this.historicalSpeeds = getHistoricalSpeeds(torrent);
 		this.peers = torrent.numPeers;
 		this.streams = getStreams(torrent).length;

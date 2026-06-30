@@ -38,6 +38,18 @@ export function getReadableProgress(progress: number) {
 	return `${formatMax2Decimals(progress * 100)}%`;
 }
 
+export function roundSpeed(bytesPerSecond: number) {
+	return Math.round(bytesPerSecond / 1024) * 1024;
+}
+
+export function getReadableSpeed(bytesPerSecond: number) {
+	const roundedSpeed = roundSpeed(bytesPerSecond);
+	if (roundedSpeed < 1024 ** 2) {
+		return `${roundedSpeed / 1024} KB/s`;
+	}
+	return `${getReadableSize(roundedSpeed)}/s`;
+}
+
 export function getReadableDuration(seconds: number) {
 	const h = Math.floor(seconds / 3600);
 	const m = Math.floor((seconds % 3600) / 60);
