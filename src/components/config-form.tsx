@@ -1,16 +1,19 @@
 "use client";
 
-import { Eye, EyeOff, RotateCcw, Save } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { Eye, EyeOff, GripVertical, RotateCcw, Save } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { type SaveConfigurationResult, saveConfiguration } from "@/app/actions";
 import {
+	getProviderName,
+	type ProviderId,
 	type RuntimeConfig,
+	type SearchSortCriterion,
 	type SeedPolicy,
 	type TorrentioSourceId,
-	torrentioSourceIds,
 } from "@/lib/config-schema";
 import { formatStrings, TorrentFormat } from "@/lib/format";
 import { supportedLanguages } from "@/lib/language";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {
 	Card,
@@ -39,6 +42,14 @@ interface Snapshot {
 
 function cloneConfig(config: RuntimeConfig) {
 	return structuredClone(config);
+}
+
+function moveItem<T>(items: T[], moved: T, target: T) {
+	const from = items.indexOf(moved);
+	const to = items.indexOf(target);
+	if (from < 0 || to < 0 || from === to) return;
+	const [item] = items.splice(from, 1);
+	items.splice(to, 0, item);
 }
 
 export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
@@ -397,6 +408,22 @@ function SearchCard({
 	const allFormatsSelected = config.search.formats.length === allFormats.length;
 	const allLanguagesSelected =
 		config.search.languages.length === allLanguages.length;
+	const draggedSortCriterion = useRef<SearchSortCriterion | undefined>(
+		undefined,
+	);
+	const draggedLanguage = useRef<string | undefined>(undefined);
+	const languageWasDragged = useRef(false);
+	const languagesByCode = new Map<string, (typeof supportedLanguages)[number]>(
+		supportedLanguages.map((language) => [language.code, language]),
+	);
+	const orderedLanguages = [
+		...config.search.languages
+			.map((code) => languagesByCode.get(code))
+			.filter((language) => language !== undefined),
+		...supportedLanguages.filter(
+			(language) => !config.search.languages.includes(language.code),
+		),
+	];
 
 	return (
 		<Section
@@ -462,26 +489,101 @@ function SearchCard({
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-2">
-					{supportedLanguages.map((language) => {
+					{orderedLanguages.map((language) => {
 						const selected = config.search.languages.includes(language.code);
 						return (
 							<Chip
 								key={language.code}
 								selected={selected}
-								onClick={() =>
+								draggable={selected}
+								onDragStart={(event) => {
+									languageWasDragged.current = true;
+									draggedLanguage.current = language.code;
+									event.dataTransfer.effectAllowed = "move";
+									event.dataTransfer.setData("text/plain", language.code);
+								}}
+								onDragEnter={(event) => {
+									const draggedCode = draggedLanguage.current;
+									if (
+										!selected ||
+										!draggedCode ||
+										draggedCode === language.code
+									) {
+										return;
+									}
+									event.preventDefault();
+									update((next) => {
+										moveItem(next.search.languages, draggedCode, language.code);
+									});
+								}}
+								onDragOver={(event) => {
+									if (selected && draggedLanguage.current)
+										event.preventDefault();
+								}}
+								onDrop={(event) => {
+									event.preventDefault();
+									draggedLanguage.current = undefined;
+								}}
+								onDragEnd={() => {
+									draggedLanguage.current = undefined;
+									setTimeout(() => {
+										languageWasDragged.current = false;
+									}, 0);
+								}}
+								onClick={() => {
+									if (languageWasDragged.current) return;
 									update((next) => {
 										next.search.languages = selected
 											? next.search.languages.filter(
 													(value) => value !== language.code,
 												)
 											: [...next.search.languages, language.code];
-									})
-								}
+									});
+								}}
 							>
 								{language.flag} {language.name}
 							</Chip>
 						);
 					})}
+				</div>
+			</div>
+
+			<div>
+				<Label>Sort priority</Label>
+				<div className="mt-2 flex flex-wrap gap-2">
+					{config.search.sortPriority.map((criterion) => (
+						<Badge
+							key={criterion}
+							variant="outline"
+							draggable
+							className="h-9 cursor-grab px-3 text-sm active:cursor-grabbing"
+							onDragStart={(event) => {
+								draggedSortCriterion.current = criterion;
+								event.dataTransfer.effectAllowed = "move";
+								event.dataTransfer.setData("text/plain", criterion);
+							}}
+							onDragEnter={(event) => {
+								const dragged = draggedSortCriterion.current;
+								if (!dragged || dragged === criterion) return;
+								event.preventDefault();
+								update((next) => {
+									moveItem(next.search.sortPriority, dragged, criterion);
+								});
+							}}
+							onDragOver={(event) => {
+								if (draggedSortCriterion.current) event.preventDefault();
+							}}
+							onDrop={(event) => {
+								event.preventDefault();
+								draggedSortCriterion.current = undefined;
+							}}
+							onDragEnd={() => {
+								draggedSortCriterion.current = undefined;
+							}}
+						>
+							{criterion[0].toUpperCase() + criterion.slice(1)}
+						</Badge>
+					))}
 				</div>
 			</div>
 		</Section>
@@ -497,64 +599,84 @@ function ProvidersCard({
 }) {
 	const fileMode = config.storage.mode === "file";
 	const torrentio = config.providers.torrentio;
+	const draggedProvider = useRef<ProviderId | undefined>(undefined);
+	const sortProps = (provider: ProviderId): ProviderSortProps => ({
+		provider,
+		draggedProvider,
+		onMove: (dragged, target) =>
+			update((next) => {
+				moveItem(next.search.providerOrder, dragged, target);
+			}),
+	});
 
 	return (
 		<Section
 			title="Providers"
 			description="Use Torrentio for every public source, or turn it off and select individual sources."
 		>
-			<PrivateProvider
-				name="nCore"
-				config={config.providers.ncore}
-				fileMode={fileMode}
-				onChange={(provider) =>
-					update((next) => {
-						next.providers.ncore = provider;
-					})
-				}
-			/>
-			<PrivateProvider
-				name="iNSANE"
-				config={config.providers.insane}
-				fileMode={fileMode}
-				onChange={(provider) =>
-					update((next) => {
-						next.providers.insane = provider;
-					})
-				}
-			/>
-
-			<ProviderBox>
-				<Toggle
-					label="Torrentio"
-					checked={torrentio.enabled}
-					onChange={(checked) =>
-						update((next) => {
-							next.providers.torrentio.enabled = checked;
-							for (const source of torrentioSourceIds) {
-								next.providers[source].enabled = false;
+			{config.search.providerOrder.map((provider) => {
+				if (provider === "ncore" || provider === "insane") {
+					return (
+						<PrivateProvider
+							key={provider}
+							name={getProviderName(provider)}
+							config={config.providers[provider]}
+							fileMode={fileMode}
+							sort={sortProps(provider)}
+							onChange={(providerConfig) =>
+								update((next) => {
+									next.providers[provider] = providerConfig;
+								})
 							}
-						})
-					}
-				/>
-				{fileMode && torrentio.enabled && (
-					<SeedPolicyControl
-						policy={torrentio.seed}
-						onChange={(policy) =>
-							update((next) => {
-								next.providers.torrentio.seed = policy;
-							})
-						}
-					/>
-				)}
-			</ProviderBox>
+						/>
+					);
+				}
 
-			{torrentioSourceIds.map((source) => {
+				if (provider === "torrentio") {
+					return (
+						<ProviderBox key={provider} sort={sortProps(provider)}>
+							<Toggle
+								label={getProviderName(provider)}
+								checked={torrentio.enabled}
+								onChange={(checked) =>
+									update((next) => {
+										next.providers.torrentio.enabled = checked;
+										for (const source of config.search.providerOrder) {
+											if (
+												source !== "ncore" &&
+												source !== "insane" &&
+												source !== "torrentio"
+											) {
+												next.providers[source].enabled = false;
+											}
+										}
+									})
+								}
+							/>
+							{fileMode && torrentio.enabled && (
+								<SeedPolicyControl
+									policy={torrentio.seed}
+									onChange={(policy) =>
+										update((next) => {
+											next.providers.torrentio.seed = policy;
+										})
+									}
+								/>
+							)}
+						</ProviderBox>
+					);
+				}
+
+				const source: TorrentioSourceId = provider;
 				const sourceConfig = config.providers[source];
 				return (
-					<ProviderBox key={source} disabled={torrentio.enabled}>
+					<ProviderBox
+						key={source}
+						disabled={torrentio.enabled}
+						sort={sortProps(source)}
+					>
 						<Toggle
-							label={sourceName(source)}
+							label={getProviderName(source)}
 							checked={torrentio.enabled ? false : sourceConfig.enabled}
 							disabled={torrentio.enabled}
 							onChange={(checked) =>
@@ -587,11 +709,13 @@ function PrivateProvider({
 	name,
 	config,
 	fileMode,
+	sort,
 	onChange,
 }: {
 	name: string;
 	config: PrivateProviderConfig;
 	fileMode: boolean;
+	sort: ProviderSortProps;
 	onChange: (config: PrivateProviderConfig) => void;
 }) {
 	const change = (recipe: (next: PrivateProviderConfig) => void) => {
@@ -600,7 +724,7 @@ function PrivateProvider({
 		onChange(next);
 	};
 	return (
-		<ProviderBox>
+		<ProviderBox sort={sort}>
 			<Toggle
 				label={name}
 				checked={config.enabled}
@@ -783,21 +907,69 @@ function Section({
 	);
 }
 
+interface ProviderSortProps {
+	provider: ProviderId;
+	draggedProvider: React.RefObject<ProviderId | undefined>;
+	onMove: (dragged: ProviderId, target: ProviderId) => void;
+}
+
 function ProviderBox({
 	children,
 	disabled = false,
+	sort,
 }: {
 	children: React.ReactNode;
 	disabled?: boolean;
+	sort?: ProviderSortProps;
 }) {
 	return (
-		<div
+		<fieldset
+			aria-label={
+				sort ? `${getProviderName(sort.provider)} provider` : undefined
+			}
 			className={`rounded-xl border p-4 transition-opacity ${
 				disabled ? "opacity-50" : ""
 			}`}
+			onDragEnter={(event) => {
+				if (!sort) return;
+				const dragged = sort.draggedProvider.current;
+				if (!dragged || dragged === sort.provider) return;
+				event.preventDefault();
+				sort.onMove(dragged, sort.provider);
+			}}
+			onDragOver={(event) => {
+				if (sort?.draggedProvider.current) event.preventDefault();
+			}}
+			onDrop={(event) => {
+				if (!sort) return;
+				event.preventDefault();
+				sort.draggedProvider.current = undefined;
+			}}
 		>
-			{children}
-		</div>
+			{sort ? (
+				<div className="flex items-start gap-2">
+					<button
+						type="button"
+						draggable
+						aria-label={`Reorder ${getProviderName(sort.provider)}`}
+						className="mt-0.5 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
+						onDragStart={(event) => {
+							sort.draggedProvider.current = sort.provider;
+							event.dataTransfer.effectAllowed = "move";
+							event.dataTransfer.setData("text/plain", sort.provider);
+						}}
+						onDragEnd={() => {
+							sort.draggedProvider.current = undefined;
+						}}
+					>
+						<GripVertical className="size-5" />
+					</button>
+					<div className="min-w-0 flex-1">{children}</div>
+				</div>
+			) : (
+				children
+			)}
+		</fieldset>
 	);
 }
 
@@ -1004,10 +1176,22 @@ function PasswordField({
 function Chip({
 	selected,
 	onClick,
+	draggable = false,
+	onDragStart,
+	onDragEnter,
+	onDragOver,
+	onDrop,
+	onDragEnd,
 	children,
 }: {
 	selected: boolean;
 	onClick: () => void;
+	draggable?: boolean;
+	onDragStart?: React.DragEventHandler<HTMLButtonElement>;
+	onDragEnter?: React.DragEventHandler<HTMLButtonElement>;
+	onDragOver?: React.DragEventHandler<HTMLButtonElement>;
+	onDrop?: React.DragEventHandler<HTMLButtonElement>;
+	onDragEnd?: React.DragEventHandler<HTMLButtonElement>;
 	children: React.ReactNode;
 }) {
 	return (
@@ -1015,7 +1199,15 @@ function Chip({
 			type="button"
 			aria-pressed={selected}
 			onClick={onClick}
+			draggable={draggable}
+			onDragStart={onDragStart}
+			onDragEnter={onDragEnter}
+			onDragOver={onDragOver}
+			onDrop={onDrop}
+			onDragEnd={onDragEnd}
 			className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition ${
+				draggable ? "cursor-grab active:cursor-grabbing " : ""
+			}${
 				selected
 					? "border-primary bg-primary text-primary-foreground"
 					: "hover:bg-accent"
@@ -1024,26 +1216,4 @@ function Chip({
 			{children}
 		</button>
 	);
-}
-
-function sourceName(source: TorrentioSourceId) {
-	const names: Partial<Record<TorrentioSourceId, string>> = {
-		yts: "YTS",
-		eztv: "EZTV",
-		rarbg: "RARBG",
-		thepiratebay: "The Pirate Bay",
-		kickasstorrents: "KickassTorrents",
-		torrentgalaxy: "TorrentGalaxy",
-		horriblesubs: "HorribleSubs",
-		nyaasi: "Nyaa.si",
-		tokyotosho: "Tokyo Toshokan",
-		rutracker: "RuTracker",
-		micoleaodublado: "Mico Leão Dublado",
-		ilcorsaronero: "Il Corsaro Nero",
-		mejortorrent: "MejorTorrent",
-		wolfmax4k: "WolfMax4K",
-		cinecalidad: "Cinecalidad",
-		besttorrents: "BestTorrents",
-	};
-	return names[source] ?? source[0].toUpperCase() + source.slice(1);
 }

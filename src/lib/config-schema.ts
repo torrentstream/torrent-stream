@@ -28,6 +28,20 @@ export const torrentioSourceIds = [
 ] as const;
 
 export type TorrentioSourceId = (typeof torrentioSourceIds)[number];
+export const providerIds = [
+	"ncore",
+	"insane",
+	"torrentio",
+	...torrentioSourceIds,
+] as const;
+export type ProviderId = (typeof providerIds)[number];
+export const searchSortCriteria = [
+	"quality",
+	"seeds",
+	"language",
+	"provider",
+] as const;
+export type SearchSortCriterion = (typeof searchSortCriteria)[number];
 export type TorrentStorageMode = "memory" | "file";
 
 export interface SeedPolicy {
@@ -61,7 +75,6 @@ export type RuntimeProviders = {
 } & Record<TorrentioSourceId, PublicProviderConfig>;
 
 export interface RuntimeConfig {
-	version: 4;
 	storage: {
 		mode: TorrentStorageMode;
 		path: string;
@@ -80,22 +93,23 @@ export interface RuntimeConfig {
 		requestTimeout: number;
 		formats: TorrentFormat[];
 		languages: string[];
+		sortPriority: SearchSortCriterion[];
+		providerOrder: ProviderId[];
 	};
 	providers: RuntimeProviders;
 }
 
 export const emptySeedPolicy = (): SeedPolicy => ({
 	enabled: false,
-	ratio: 0,
+	ratio: 1,
 	timeSeconds: 0,
 	timeIncrementSeconds: 0,
-	timeIncrementBytes: 1024 ** 3,
+	timeIncrementBytes: 0,
 	ratioDiscount: false,
 });
 
 export function createDefaultRuntimeConfig(): RuntimeConfig {
 	return {
-		version: 4,
 		storage: {
 			mode: "memory",
 			path: "/data",
@@ -113,20 +127,36 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 		search: {
 			requestTimeout: 5 * 1000,
 			formats: Object.values(TorrentFormat),
-			languages: supportedLanguages.map(({ code }) => code),
+			languages: ["en", "hu"],
+			sortPriority: [...searchSortCriteria],
+			providerOrder: [...providerIds],
 		},
 		providers: {
 			ncore: {
 				enabled: false,
 				username: "",
 				password: "",
-				seed: emptySeedPolicy(),
+				seed: {
+					enabled: true,
+					ratio: 1,
+					timeSeconds: 48 * 60 * 60,
+					timeIncrementSeconds: 0.4 * 60 * 60,
+					timeIncrementBytes: 1024 ** 3,
+					ratioDiscount: true,
+				},
 			},
 			insane: {
 				enabled: false,
 				username: "",
 				password: "",
-				seed: emptySeedPolicy(),
+				seed: {
+					enabled: true,
+					ratio: 1,
+					timeSeconds: 24 * 60 * 60,
+					timeIncrementSeconds: 0,
+					timeIncrementBytes: 1024 ** 3,
+					ratioDiscount: true,
+				},
 			},
 			torrentio: {
 				enabled: true,
@@ -142,26 +172,28 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 	};
 }
 
-function object(value: unknown, name: string): Record<string, unknown> {
-	if (!value || typeof value !== "object" || Array.isArray(value)) {
-		throw new Error(`${name} must be an object`);
-	}
-	return value as Record<string, unknown>;
+function object(value: unknown): Record<string, unknown> {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: {};
 }
 
-function boolean(value: unknown, name: string) {
-	if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
-	return value;
+function boolean(value: unknown, fallback: boolean) {
+	return typeof value === "boolean" ? value : fallback;
 }
 
-function string(value: unknown, name: string) {
-	if (typeof value !== "string") throw new Error(`${name} must be a string`);
-	return value;
+function string(value: unknown, fallback: string) {
+	return typeof value === "string" ? value : fallback;
+}
+
+function nonEmptyString(value: unknown, fallback: string) {
+	const parsed = string(value, fallback).trim();
+	return parsed || fallback;
 }
 
 function number(
 	value: unknown,
-	name: string,
+	fallback: number,
 	{ min = 0, integer = false }: { min?: number; integer?: boolean } = {},
 ) {
 	if (
@@ -170,163 +202,235 @@ function number(
 		value < min ||
 		(integer && !Number.isInteger(value))
 	) {
-		throw new Error(
-			`${name} must be ${integer ? "an integer" : "a number"} greater than or equal to ${min}`,
-		);
+		return fallback;
 	}
 	return value;
 }
 
-function transferLimit(value: unknown, name: string) {
-	return number(value, name, { min: -1, integer: true });
+function transferLimit(value: unknown, fallback: number) {
+	return number(value, fallback, { min: -1, integer: true });
 }
 
-function parseSeedPolicy(value: unknown, name: string): SeedPolicy {
-	const seed = object(value, name);
+function parseOrder<T extends string>(
+	value: unknown,
+	allowed: readonly T[],
+	fallback: readonly T[],
+) {
+	if (
+		!Array.isArray(value) ||
+		value.length !== allowed.length ||
+		!value.every(
+			(item) => typeof item === "string" && allowed.includes(item as T),
+		) ||
+		new Set(value).size !== allowed.length
+	) {
+		return [...fallback];
+	}
+	return [...value] as T[];
+}
+
+function parseSeedPolicy(value: unknown, fallback: SeedPolicy): SeedPolicy {
+	const seed = object(value);
 	const parsed = {
-		enabled: boolean(seed.enabled, `${name}.enabled`),
-		ratio: number(seed.ratio, `${name}.ratio`),
-		timeSeconds: number(seed.timeSeconds, `${name}.timeSeconds`, {
+		enabled: boolean(seed.enabled, fallback.enabled),
+		ratio: number(seed.ratio, fallback.ratio),
+		timeSeconds: number(seed.timeSeconds, fallback.timeSeconds, {
 			integer: true,
 		}),
 		timeIncrementSeconds: number(
 			seed.timeIncrementSeconds,
-			`${name}.timeIncrementSeconds`,
+			fallback.timeIncrementSeconds,
 			{ integer: true },
 		),
 		timeIncrementBytes: number(
 			seed.timeIncrementBytes,
-			`${name}.timeIncrementBytes`,
+			fallback.timeIncrementBytes,
 			{ integer: true },
 		),
-		ratioDiscount: boolean(seed.ratioDiscount, `${name}.ratioDiscount`),
+		ratioDiscount: boolean(seed.ratioDiscount, fallback.ratioDiscount),
 	};
 	if (parsed.enabled && parsed.ratio === 0 && parsed.timeSeconds === 0) {
-		throw new Error(`${name} needs a ratio or time target`);
+		parsed.ratio = fallback.ratio || 1;
 	}
 	if (parsed.timeIncrementSeconds > 0 && parsed.timeIncrementBytes === 0) {
-		throw new Error(`${name}.timeIncrementBytes must be positive`);
+		parsed.timeIncrementBytes = fallback.timeIncrementBytes;
+		if (parsed.timeIncrementBytes === 0) {
+			parsed.timeIncrementSeconds = fallback.timeIncrementSeconds;
+		}
 	}
 	return parsed;
 }
 
 export function parseRuntimeConfig(value: unknown): RuntimeConfig {
-	const root = object(value, "config");
-	if (root.version !== 4) throw new Error("Unsupported config version");
-
-	const storage = object(root.storage, "storage");
-	if (storage.mode !== "memory" && storage.mode !== "file") {
-		throw new Error("storage.mode must be memory or file");
-	}
-
-	const torrent = object(root.torrent, "torrent");
-	const search = object(root.search, "search");
-	const providers = object(root.providers, "providers");
-	const torrentio = object(providers.torrentio, "providers.torrentio");
-	const ncore = object(providers.ncore, "providers.ncore");
-	const insane = object(providers.insane, "providers.insane");
+	const defaults = createDefaultRuntimeConfig();
+	const root = object(value);
+	const storage = object(root.storage);
+	const torrent = object(root.torrent);
+	const search = object(root.search);
+	const providers = object(root.providers);
 
 	const formats = search.formats;
-	if (
+	const parsedFormats =
 		!Array.isArray(formats) ||
 		!formats.every((format) =>
 			Object.values(TorrentFormat).includes(format as TorrentFormat),
 		)
-	) {
-		throw new Error("search.formats contains an unsupported format");
-	}
+			? [...defaults.search.formats]
+			: ([...new Set(formats)] as TorrentFormat[]);
 
 	const languages = search.languages;
-	if (
+	const supportedLanguageCodes = new Set(
+		supportedLanguages.map(({ code }) => code),
+	);
+	const parsedLanguages =
 		!Array.isArray(languages) ||
 		!languages.every(
-			(language) => typeof language === "string" && /^[a-z]{2}$/.test(language),
+			(language) =>
+				typeof language === "string" &&
+				supportedLanguageCodes.has(
+					language as (typeof supportedLanguages)[number]["code"],
+				),
 		)
-	) {
-		throw new Error("search.languages must contain two-letter language codes");
-	}
-
-	const torrentioEnabled = boolean(
-		torrentio.enabled,
-		"providers.torrentio.enabled",
+			? [...defaults.search.languages]
+			: [...new Set(languages)];
+	const sortPriority = parseOrder(
+		search.sortPriority,
+		searchSortCriteria,
+		defaults.search.sortPriority,
 	);
+	const providerOrder = parseOrder(
+		search.providerOrder,
+		providerIds,
+		defaults.search.providerOrder,
+	);
+
 	const parsedSources = Object.fromEntries(
 		torrentioSourceIds.map((id) => {
-			const source = object(providers[id], `providers.${id}`);
+			const source = object(providers[id]);
+			const fallback = defaults.providers[id];
 			return [
 				id,
 				{
-					enabled: boolean(source.enabled, `providers.${id}.enabled`),
-					seed: parseSeedPolicy(source.seed, `providers.${id}.seed`),
+					enabled: boolean(source.enabled, fallback.enabled),
+					seed: parseSeedPolicy(source.seed, fallback.seed),
 				},
 			];
 		}),
 	) as Record<TorrentioSourceId, PublicProviderConfig>;
-	if (
-		torrentioEnabled &&
-		Object.values(parsedSources).some((source) => source.enabled)
-	) {
-		throw new Error(
-			"Torrentio and individual Torrentio sources cannot be enabled together",
-		);
+	const torrentio = object(providers.torrentio);
+	const parsedTorrentio = {
+		enabled: boolean(torrentio.enabled, defaults.providers.torrentio.enabled),
+		seed: parseSeedPolicy(torrentio.seed, defaults.providers.torrentio.seed),
+	};
+	if (parsedTorrentio.enabled) {
+		for (const source of Object.values(parsedSources)) source.enabled = false;
 	}
 
+	const ncore = object(providers.ncore);
+	const insane = object(providers.insane);
 	return {
-		version: 4,
 		storage: {
-			mode: storage.mode,
-			path: string(storage.path, "storage.path").trim(),
+			mode:
+				storage.mode === "memory" || storage.mode === "file"
+					? storage.mode
+					: defaults.storage.mode,
+			path: nonEmptyString(storage.path, defaults.storage.path),
 			streamMemoryLimit: number(
 				storage.streamMemoryLimit,
-				"storage.streamMemoryLimit",
+				defaults.storage.streamMemoryLimit,
 				{ integer: true },
 			),
-			keepFiles: boolean(storage.keepFiles, "storage.keepFiles"),
-			idleDownload: boolean(storage.idleDownload, "storage.idleDownload"),
+			keepFiles: boolean(storage.keepFiles, defaults.storage.keepFiles),
+			idleDownload: boolean(
+				storage.idleDownload,
+				defaults.storage.idleDownload,
+			),
 		},
 		torrent: {
 			downloadLimit: transferLimit(
 				torrent.downloadLimit,
-				"torrent.downloadLimit",
+				defaults.torrent.downloadLimit,
 			),
-			uploadLimit: transferLimit(torrent.uploadLimit, "torrent.uploadLimit"),
-			addTimeout: number(torrent.addTimeout, "torrent.addTimeout", {
+			uploadLimit: transferLimit(
+				torrent.uploadLimit,
+				defaults.torrent.uploadLimit,
+			),
+			addTimeout: number(torrent.addTimeout, defaults.torrent.addTimeout, {
 				integer: true,
 			}),
-			idleTimeout: number(torrent.idleTimeout, "torrent.idleTimeout", {
+			idleTimeout: number(torrent.idleTimeout, defaults.torrent.idleTimeout, {
 				integer: true,
 			}),
-			removeTimeout: number(torrent.removeTimeout, "torrent.removeTimeout", {
-				integer: true,
-			}),
+			removeTimeout: number(
+				torrent.removeTimeout,
+				defaults.torrent.removeTimeout,
+				{ integer: true },
+			),
 		},
 		search: {
-			requestTimeout: number(search.requestTimeout, "search.requestTimeout", {
-				integer: true,
-			}),
-			formats: [...new Set(formats)] as TorrentFormat[],
-			languages: [...new Set(languages)],
+			requestTimeout: number(
+				search.requestTimeout,
+				defaults.search.requestTimeout,
+				{
+					integer: true,
+				},
+			),
+			formats: parsedFormats,
+			languages: parsedLanguages,
+			sortPriority,
+			providerOrder,
 		},
 		providers: {
 			ncore: {
-				enabled: boolean(ncore.enabled, "providers.ncore.enabled"),
-				username: string(ncore.username, "providers.ncore.username"),
-				password: string(ncore.password, "providers.ncore.password"),
-				seed: parseSeedPolicy(ncore.seed, "providers.ncore.seed"),
+				enabled: boolean(ncore.enabled, defaults.providers.ncore.enabled),
+				username: string(ncore.username, defaults.providers.ncore.username),
+				password: string(ncore.password, defaults.providers.ncore.password),
+				seed: parseSeedPolicy(ncore.seed, defaults.providers.ncore.seed),
 			},
 			insane: {
-				enabled: boolean(insane.enabled, "providers.insane.enabled"),
-				username: string(insane.username, "providers.insane.username"),
-				password: string(insane.password, "providers.insane.password"),
-				seed: parseSeedPolicy(insane.seed, "providers.insane.seed"),
+				enabled: boolean(insane.enabled, defaults.providers.insane.enabled),
+				username: string(insane.username, defaults.providers.insane.username),
+				password: string(insane.password, defaults.providers.insane.password),
+				seed: parseSeedPolicy(insane.seed, defaults.providers.insane.seed),
 			},
-			torrentio: {
-				enabled: torrentioEnabled,
-				seed: parseSeedPolicy(torrentio.seed, "providers.torrentio.seed"),
-			},
+			torrentio: parsedTorrentio,
 			...parsedSources,
 		} as RuntimeProviders,
 	};
+}
+
+export function getProviderName(provider: string | undefined) {
+	const names: Partial<Record<ProviderId, string>> = {
+		ncore: "nCore",
+		insane: "iNSANE",
+		torrentio: "Torrentio",
+		yts: "YTS",
+		eztv: "EZTV",
+		rarbg: "RARBG",
+		"1337x": "1337x",
+		thepiratebay: "The Pirate Bay",
+		kickasstorrents: "KickassTorrents",
+		torrentgalaxy: "TorrentGalaxy",
+		magnetdl: "MagnetDL",
+		horriblesubs: "HorribleSubs",
+		nyaasi: "Nyaa.si",
+		tokyotosho: "Tokyo Toshokan",
+		anidex: "AniDex",
+		rutor: "Rutor",
+		rutracker: "RuTracker",
+		comando: "Comando",
+		bludv: "BluDV",
+		micoleaodublado: "Mico Leão Dublado",
+		torrent9: "Torrent9",
+		ilcorsaronero: "Il Corsaro Nero",
+		mejortorrent: "MejorTorrent",
+		wolfmax4k: "WolfMax4K",
+		cinecalidad: "CineCalidad",
+		besttorrents: "BestTorrents",
+	};
+	if (!provider) return "Unknown";
+	if (provider === "torrentio-unknown") return "Torrentio";
+	return names[provider as ProviderId] ?? provider;
 }
 
 export function getSeedPolicy(

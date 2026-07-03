@@ -66,6 +66,7 @@ function load(): RuntimeConfigSnapshot {
 		const stored = JSON.parse(readFileSync(configFile, "utf8"));
 		const config = parseRuntimeConfig(stored);
 		ensureStorageDirectory(config);
+		if (JSON.stringify(stored) !== JSON.stringify(config)) persist(config);
 		return { config, revision: revision(config) };
 	} catch (error) {
 		const suffix = new Date().toISOString().replace(/:/g, "-");

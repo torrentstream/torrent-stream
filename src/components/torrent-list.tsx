@@ -7,6 +7,7 @@ import {
 	File,
 	Film,
 	Gauge,
+	Globe,
 	HardDriveDownload,
 	HardDriveUpload,
 	Subtitles,
@@ -199,6 +200,10 @@ function TorrentCard({
 					</div>
 				</div>
 				<div className="flex flex-wrap gap-2">
+					<div className="flex items-center gap-2 text-muted-foreground">
+						<Globe size={14} />
+						<span>{torrent.provider}</span>
+					</div>
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<Download size={14} />
 						<FlipNumber>{torrent.downloadSpeed}</FlipNumber>

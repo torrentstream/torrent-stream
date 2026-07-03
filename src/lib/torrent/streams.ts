@@ -487,6 +487,10 @@ export function getStreams(torrent: Torrent) {
 	return torrentData.get(torrent)?.streams.values().toArray() ?? [];
 }
 
+export function getTorrentProvider(torrent: Torrent) {
+	return torrentData.get(torrent)?.provider;
+}
+
 export function getStreamedFiles(torrent: Torrent) {
 	return torrentData.get(torrent)?.streamedFiles ?? new Set<string>();
 }

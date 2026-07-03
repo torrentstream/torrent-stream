@@ -1,7 +1,11 @@
 "use server";
 
 import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config";
-import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config-schema";
+import {
+	getProviderName,
+	parseRuntimeConfig,
+	type RuntimeConfig,
+} from "@/lib/config-schema";
 import { getReadableDuration, getReadableSize } from "@/lib/file";
 import { getTorrentClient } from "@/lib/torrent/clients";
 import {
@@ -9,12 +13,14 @@ import {
 	destroyTorrent,
 	getSeedStats,
 	getStreams,
+	getTorrentProvider,
 } from "@/lib/torrent/streams";
 import { TorrentInfo } from "@/lib/torrent/types";
 
 export interface TorrentStats {
 	torrents: {
 		name: string;
+		provider: string;
 		infoHash: string;
 		streams: number;
 		peers: number;
@@ -59,6 +65,7 @@ export async function getTorrents(): Promise<TorrentStats> {
 				const seed = getSeedStats(torrent);
 				return {
 					name: info.name,
+					provider: getProviderName(getTorrentProvider(torrent)),
 					infoHash: info.infoHash,
 					streams: info.streams,
 					peers: info.peers,

@@ -39,7 +39,8 @@ export function getReadableProgress(progress: number) {
 }
 
 export function roundSpeed(bytesPerSecond: number) {
-	return Math.round(bytesPerSecond / 1024) * 1024;
+	const resolution = 10 * 1024;
+	return Math.round(bytesPerSecond / resolution) * resolution;
 }
 
 export function getReadableSpeed(bytesPerSecond: number) {

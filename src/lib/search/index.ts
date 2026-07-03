@@ -60,7 +60,37 @@ export async function getStremioStreams(
 		`Search found ${streams.length} streams for ${category === TorrentCategory.Movie ? imdbId : `${imdbId} season ${season} episode ${episode}`}`,
 	);
 
-	return streams.sort((a, b) => b.score - a.score).map(({ stream }) => stream);
+	const { languages, providerOrder, sortPriority } =
+		getRuntimeConfig().config.search;
+	const languagePriority = new Map(
+		languages.map((language, index) => [language, index]),
+	);
+	const providerPriority = new Map<string, number>(
+		providerOrder.map((provider, index) => [provider, index]),
+	);
+
+	return streams
+		.sort((a, b) => {
+			for (const criterion of sortPriority) {
+				let difference = 0;
+				if (criterion === "quality" && a.score !== b.score) {
+					difference = b.score - a.score;
+				} else if (criterion === "provider") {
+					difference =
+						(providerPriority.get(a.provider) ?? providerOrder.length) -
+						(providerPriority.get(b.provider) ?? providerOrder.length);
+				} else if (criterion === "language") {
+					difference =
+						(languagePriority.get(a.language) ?? languages.length) -
+						(languagePriority.get(b.language) ?? languages.length);
+				} else if (criterion === "seeds") {
+					difference = b.seeds - a.seeds;
+				}
+				if (difference !== 0 && !Number.isNaN(difference)) return difference;
+			}
+			return 0;
+		})
+		.map(({ stream }) => stream);
 }
 
 async function searchTorrents(
@@ -199,6 +229,9 @@ async function getStreamsFromTorrent(
 			formats,
 			quality,
 			score,
+			provider: torrent.provider,
+			language: torrent.language.code,
+			seeds: torrent.seeds ?? 0,
 		};
 	});
 }
