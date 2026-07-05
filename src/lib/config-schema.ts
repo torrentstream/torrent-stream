@@ -1,40 +1,12 @@
 import { TorrentFormat } from "./format";
 import { supportedLanguages } from "./language";
 
-export const torrentioSourceIds = [
-	"yts",
-	"eztv",
-	"rarbg",
-	"1337x",
-	"thepiratebay",
-	"kickasstorrents",
-	"torrentgalaxy",
-	"magnetdl",
-	"horriblesubs",
-	"nyaasi",
-	"tokyotosho",
-	"anidex",
-	"rutor",
-	"rutracker",
-	"comando",
-	"bludv",
-	"micoleaodublado",
-	"torrent9",
-	"ilcorsaronero",
-	"mejortorrent",
-	"wolfmax4k",
-	"cinecalidad",
-	"besttorrents",
-] as const;
-
-export type TorrentioSourceId = (typeof torrentioSourceIds)[number];
 export const providerIds = [
 	"ncore",
 	"insane",
 	"torrentio",
-	...torrentioSourceIds,
-] as const;
-export type ProviderId = (typeof providerIds)[number];
+] as const satisfies readonly ProviderId[];
+
 export const searchSortCriteria = [
 	"quality",
 	"seeds",
@@ -44,35 +16,29 @@ export const searchSortCriteria = [
 export type SearchSortCriterion = (typeof searchSortCriteria)[number];
 export type TorrentStorageMode = "memory" | "file";
 
-export interface SeedPolicy {
+export interface TorrentioProviderConfig {
 	enabled: boolean;
-	ratio: number;
-	timeSeconds: number;
-	timeIncrementSeconds: number;
-	timeIncrementBytes: number;
-	ratioDiscount: boolean;
-}
-
-export interface PublicProviderConfig {
-	enabled: boolean;
-	seed: SeedPolicy;
+	allTrackers: boolean;
+	sources: string[];
 }
 
 export type RuntimeProviders = {
-	torrentio: PublicProviderConfig;
+	torrentio: TorrentioProviderConfig;
 	ncore: {
 		enabled: boolean;
 		username: string;
 		password: string;
-		seed: SeedPolicy;
+		seeding: boolean;
 	};
 	insane: {
 		enabled: boolean;
 		username: string;
 		password: string;
-		seed: SeedPolicy;
+		seeding: boolean;
 	};
-} & Record<TorrentioSourceId, PublicProviderConfig>;
+};
+
+export type ProviderId = keyof RuntimeProviders;
 
 export interface RuntimeConfig {
 	storage: {
@@ -98,15 +64,6 @@ export interface RuntimeConfig {
 	};
 	providers: RuntimeProviders;
 }
-
-export const emptySeedPolicy = (): SeedPolicy => ({
-	enabled: false,
-	ratio: 1,
-	timeSeconds: 0,
-	timeIncrementSeconds: 0,
-	timeIncrementBytes: 0,
-	ratioDiscount: false,
-});
 
 export function createDefaultRuntimeConfig(): RuntimeConfig {
 	return {
@@ -136,39 +93,20 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 				enabled: false,
 				username: "",
 				password: "",
-				seed: {
-					enabled: true,
-					ratio: 1,
-					timeSeconds: 48 * 60 * 60,
-					timeIncrementSeconds: 0.4 * 60 * 60,
-					timeIncrementBytes: 1024 ** 3,
-					ratioDiscount: true,
-				},
+				seeding: true,
 			},
 			insane: {
 				enabled: false,
 				username: "",
 				password: "",
-				seed: {
-					enabled: true,
-					ratio: 1,
-					timeSeconds: 24 * 60 * 60,
-					timeIncrementSeconds: 0,
-					timeIncrementBytes: 1024 ** 3,
-					ratioDiscount: true,
-				},
+				seeding: true,
 			},
 			torrentio: {
 				enabled: true,
-				seed: emptySeedPolicy(),
+				allTrackers: true,
+				sources: [],
 			},
-			...Object.fromEntries(
-				torrentioSourceIds.map((id) => [
-					id,
-					{ enabled: false, seed: emptySeedPolicy() },
-				]),
-			),
-		} as RuntimeProviders,
+		},
 	};
 }
 
@@ -229,38 +167,6 @@ function parseOrder<T extends string>(
 	return [...value] as T[];
 }
 
-function parseSeedPolicy(value: unknown, fallback: SeedPolicy): SeedPolicy {
-	const seed = object(value);
-	const parsed = {
-		enabled: boolean(seed.enabled, fallback.enabled),
-		ratio: number(seed.ratio, fallback.ratio),
-		timeSeconds: number(seed.timeSeconds, fallback.timeSeconds, {
-			integer: true,
-		}),
-		timeIncrementSeconds: number(
-			seed.timeIncrementSeconds,
-			fallback.timeIncrementSeconds,
-			{ integer: true },
-		),
-		timeIncrementBytes: number(
-			seed.timeIncrementBytes,
-			fallback.timeIncrementBytes,
-			{ integer: true },
-		),
-		ratioDiscount: boolean(seed.ratioDiscount, fallback.ratioDiscount),
-	};
-	if (parsed.enabled && parsed.ratio === 0 && parsed.timeSeconds === 0) {
-		parsed.ratio = fallback.ratio || 1;
-	}
-	if (parsed.timeIncrementSeconds > 0 && parsed.timeIncrementBytes === 0) {
-		parsed.timeIncrementBytes = fallback.timeIncrementBytes;
-		if (parsed.timeIncrementBytes === 0) {
-			parsed.timeIncrementSeconds = fallback.timeIncrementSeconds;
-		}
-	}
-	return parsed;
-}
-
 export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 	const defaults = createDefaultRuntimeConfig();
 	const root = object(value);
@@ -304,27 +210,21 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 		defaults.search.providerOrder,
 	);
 
-	const parsedSources = Object.fromEntries(
-		torrentioSourceIds.map((id) => {
-			const source = object(providers[id]);
-			const fallback = defaults.providers[id];
-			return [
-				id,
-				{
-					enabled: boolean(source.enabled, fallback.enabled),
-					seed: parseSeedPolicy(source.seed, fallback.seed),
-				},
-			];
-		}),
-	) as Record<TorrentioSourceId, PublicProviderConfig>;
 	const torrentio = object(providers.torrentio);
+	const configuredSources = torrentio.sources;
+	const parsedSourceList =
+		Array.isArray(configuredSources) &&
+		configuredSources.every((source) => typeof source === "string")
+			? [...new Set(configuredSources)]
+			: [...defaults.providers.torrentio.sources];
 	const parsedTorrentio = {
 		enabled: boolean(torrentio.enabled, defaults.providers.torrentio.enabled),
-		seed: parseSeedPolicy(torrentio.seed, defaults.providers.torrentio.seed),
+		allTrackers: boolean(
+			torrentio.allTrackers,
+			defaults.providers.torrentio.allTrackers,
+		),
+		sources: parsedSourceList,
 	};
-	if (parsedTorrentio.enabled) {
-		for (const source of Object.values(parsedSources)) source.enabled = false;
-	}
 
 	const ncore = object(providers.ncore);
 	const insane = object(providers.insane);
@@ -385,63 +285,27 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 				enabled: boolean(ncore.enabled, defaults.providers.ncore.enabled),
 				username: string(ncore.username, defaults.providers.ncore.username),
 				password: string(ncore.password, defaults.providers.ncore.password),
-				seed: parseSeedPolicy(ncore.seed, defaults.providers.ncore.seed),
+				seeding: boolean(ncore.seeding, defaults.providers.ncore.seeding),
 			},
 			insane: {
 				enabled: boolean(insane.enabled, defaults.providers.insane.enabled),
 				username: string(insane.username, defaults.providers.insane.username),
 				password: string(insane.password, defaults.providers.insane.password),
-				seed: parseSeedPolicy(insane.seed, defaults.providers.insane.seed),
+				seeding: boolean(insane.seeding, defaults.providers.insane.seeding),
 			},
 			torrentio: parsedTorrentio,
-			...parsedSources,
-		} as RuntimeProviders,
+		},
 	};
 }
 
-export function getProviderName(provider: string | undefined) {
-	const names: Partial<Record<ProviderId, string>> = {
-		ncore: "nCore",
-		insane: "iNSANE",
-		torrentio: "Torrentio",
-		yts: "YTS",
-		eztv: "EZTV",
-		rarbg: "RARBG",
-		"1337x": "1337x",
-		thepiratebay: "The Pirate Bay",
-		kickasstorrents: "KickassTorrents",
-		torrentgalaxy: "TorrentGalaxy",
-		magnetdl: "MagnetDL",
-		horriblesubs: "HorribleSubs",
-		nyaasi: "Nyaa.si",
-		tokyotosho: "Tokyo Toshokan",
-		anidex: "AniDex",
-		rutor: "Rutor",
-		rutracker: "RuTracker",
-		comando: "Comando",
-		bludv: "BluDV",
-		micoleaodublado: "Mico Leão Dublado",
-		torrent9: "Torrent9",
-		ilcorsaronero: "Il Corsaro Nero",
-		mejortorrent: "MejorTorrent",
-		wolfmax4k: "WolfMax4K",
-		cinecalidad: "CineCalidad",
-		besttorrents: "BestTorrents",
-	};
-	if (!provider) return "Unknown";
-	if (provider === "torrentio-unknown") return "Torrentio";
-	return names[provider as ProviderId] ?? provider;
+export function isProviderEnabled(config: RuntimeConfig, provider: ProviderId) {
+	return config.providers[provider].enabled;
 }
 
-export function getSeedPolicy(
+export function isProviderSeedingEnabled(
 	config: RuntimeConfig,
-	provider: string | undefined,
+	provider: ProviderId,
 ) {
-	if (provider === "ncore") return config.providers.ncore.seed;
-	if (provider === "insane") return config.providers.insane.seed;
-	if (provider === "torrentio") return config.providers.torrentio.seed;
-	if (provider && torrentioSourceIds.includes(provider as TorrentioSourceId)) {
-		return config.providers[provider as TorrentioSourceId].seed;
-	}
-	return undefined;
+	const providerConfig = config.providers[provider];
+	return "seeding" in providerConfig && providerConfig.seeding;
 }

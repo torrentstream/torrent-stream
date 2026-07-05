@@ -1,12 +1,9 @@
 "use server";
 
 import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config";
-import {
-	getProviderName,
-	parseRuntimeConfig,
-	type RuntimeConfig,
-} from "@/lib/config-schema";
-import { getReadableDuration, getReadableSize } from "@/lib/file";
+import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config-schema";
+import { getReadableSize } from "@/lib/file";
+import { getProviderName, providers } from "@/lib/search/providers";
 import { getTorrentClient } from "@/lib/torrent/clients";
 import {
 	applyRuntimeTorrentConfig,
@@ -32,7 +29,6 @@ export interface TorrentStats {
 		uploadSpeed: string;
 		seeding: boolean;
 		ratio?: string;
-		seedTimeRemaining?: string;
 		historicalSpeeds: {
 			date: Date;
 			download: number;
@@ -81,10 +77,6 @@ export async function getTorrents(): Promise<TorrentStats> {
 					uploadSpeed: info.readableUploadSpeed,
 					seeding: seed?.seeding ?? false,
 					ratio: seed?.ratio.toFixed(2),
-					seedTimeRemaining:
-						seed?.secondsRemaining !== undefined
-							? getReadableDuration(seed.secondsRemaining)
-							: undefined,
 					historicalSpeeds: info.historicalSpeeds,
 					files: info.files
 						.filter((file) => file.streamed)
@@ -119,7 +111,14 @@ export async function removeTorrent(
 }
 
 export async function getConfiguration() {
-	return getRuntimeConfig();
+	return {
+		...getRuntimeConfig(),
+		providerOptions: providers.map((provider) => ({
+			id: provider.id,
+			name: provider.name,
+			trackers: provider.trackers,
+		})),
+	};
 }
 
 export type SaveConfigurationResult =

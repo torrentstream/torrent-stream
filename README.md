@@ -77,7 +77,7 @@ If you already have your own domain and a reverse proxy setup, or any other way 
 
 Open `/config` in the web interface to configure storage behavior, limits,
 timeouts, search filters, providers, credentials, Torrentio sources, and
-per-source seeding rules. The settings are saved to
+seeding for private providers. The settings are saved to
 `$CONFIG_PATH/config.json` and applied without restarting the application
 where possible. Changing storage mode requires confirmation because it
 rebuilds the torrent clients and interrupts active playback.
@@ -91,14 +91,8 @@ The application itself only reads these environment variables:
 | DOMAIN_NAME | DuckDNS domain used by the bundled Caddy server. | - |
 | DUCKDNS_TOKEN | DuckDNS token used for DNS-01 TLS. | - |
 | ENCRYPTION_KEY | Long random key used to encrypt stream URLs. | Development fallback |
-| CONFIG_PATH | Directory containing `config.json`, seed counters, and torrent metainfo. | `/config` |
+| CONFIG_PATH | Directory containing `config.json`, resumable torrent records, and torrent metainfo. | `/config` |
 
 Use `/config` and the configured torrent storage path (default `/data`) with
 persistent volumes when durable configuration or file storage is desired.
 Running multiple application instances against the same paths is unsupported.
-
-A torrent is removed once **either** configured seed target is met. A
-ratio-only policy can remain active indefinitely when nobody downloads, so a
-time target is useful as a cap. The optional size increment adds time for each
-configured amount of downloaded data. Ratio discount progressively reduces the
-required time as the target ratio is approached.

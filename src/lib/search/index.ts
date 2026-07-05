@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { getRuntimeConfig } from "@/lib/config";
+import { isProviderEnabled } from "@/lib/config-schema";
 import { encryptText } from "@/lib/encryption";
 import { getReadableSize } from "@/lib/file";
 import { getFormats, TorrentFormat } from "@/lib/format";
@@ -7,21 +8,12 @@ import { logger } from "@/lib/logger";
 import { getTorrentInfo } from "@/lib/torrent";
 import { serializeTorrentRequest } from "@/lib/torrent/request";
 import type { TorrentInfo } from "@/lib/torrent/types";
-import { InsaneProvider } from "./providers/insane";
-import { NcoreProvider } from "./providers/ncore";
-import { TorrentioProvider } from "./providers/torrentio";
+import { providers } from "./providers";
 import {
 	type StremioStream,
 	TorrentCategory,
-	type TorrentSearchProvider,
 	type TorrentSearchResult,
 } from "./types";
-
-export const providers: TorrentSearchProvider[] = [
-	new TorrentioProvider(),
-	new NcoreProvider(),
-	new InsaneProvider(),
-];
 
 export async function getStremioStreams(
 	endpoint: string,
@@ -99,8 +91,9 @@ async function searchTorrents(
 	season?: number,
 	episode?: number,
 ) {
+	const config = getRuntimeConfig().config;
 	const promises = providers.map((provider) =>
-		provider.isEnabled()
+		isProviderEnabled(config, provider.id)
 			? provider.searchTorrentsByCategory(query, category, season, episode)
 			: Promise.resolve([]),
 	);

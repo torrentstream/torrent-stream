@@ -10,12 +10,14 @@ import { join } from "node:path";
 import type { Torrent, TorrentFile } from "webtorrent";
 import { deploymentConfig, getRuntimeConfig } from "@/lib/config";
 import {
-	getSeedPolicy,
+	isProviderEnabled,
+	isProviderSeedingEnabled,
 	type RuntimeConfig,
-	type SeedPolicy,
 } from "@/lib/config-schema";
 import { logger } from "@/lib/logger";
 import { LRU } from "@/lib/lru";
+import { getProvider, providers } from "@/lib/search/providers";
+import type { TorrentSearchProvider } from "@/lib/search/types";
 import {
 	applyTransferLimits,
 	getTorrentClient,
@@ -37,22 +39,13 @@ interface SeedState {
 	downloadedBase: number;
 	uploadedOffset: number;
 	downloadedOffset: number;
-	seedSeconds: number;
 }
 
 interface SeedRecord {
-	name: string;
-	size: number;
 	uploaded: number;
 	downloaded: number;
-	seedSeconds: number;
-	addedAt: string;
 	files: string[];
 	provider?: string;
-}
-
-interface TrackerAnnounceEmitter {
-	on(event: "trackerAnnounce", listener: () => void): void;
 }
 
 declare global {
@@ -60,9 +53,11 @@ declare global {
 	var seedRecordsMap: Record<string, SeedRecord> | undefined;
 	var torrentStatsInterval: NodeJS.Timeout | undefined;
 	var torrentShutdownHandlersRegistered: boolean | undefined;
+	var seedRequirementInterval: NodeJS.Timeout | undefined;
 }
 
 const stateFile = join(deploymentConfig.configPath, "torrents.json");
+
 let seedRecordsDirty = false;
 let lastSeedFlush = 0;
 
@@ -81,7 +76,29 @@ function loadSeedRecords(): Record<string, SeedRecord> {
 		) {
 			throw new Error("Seed state is not an object");
 		}
-		return parsed;
+		return Object.fromEntries(
+			Object.entries(parsed).map(([infoHash, value]) => {
+				const record =
+					value && typeof value === "object"
+						? (value as Record<string, unknown>)
+						: {};
+				return [
+					infoHash,
+					{
+						uploaded: typeof record.uploaded === "number" ? record.uploaded : 0,
+						downloaded:
+							typeof record.downloaded === "number" ? record.downloaded : 0,
+						files: Array.isArray(record.files)
+							? record.files.filter(
+									(file): file is string => typeof file === "string",
+								)
+							: [],
+						provider:
+							typeof record.provider === "string" ? record.provider : undefined,
+					},
+				];
+			}),
+		);
 	} catch (error) {
 		logger.error(error);
 		const backup = `${stateFile}.invalid-${Date.now()}`;
@@ -142,21 +159,13 @@ if (!global.torrentShutdownHandlersRegistered) {
 	process.once("SIGINT", shutdown);
 }
 
-function currentPolicy(provider: string | undefined) {
-	return getSeedPolicy(getRuntimeConfig().config, provider);
-}
-
 function isSeedingEnabled(provider: string | undefined) {
+	const config = getRuntimeConfig().config;
+	const registeredProvider = getProvider(provider);
 	return (
-		getRuntimeConfig().config.storage.mode === "file" &&
-		currentPolicy(provider)?.enabled === true
-	);
-}
-
-function hasTimeTarget(policy: SeedPolicy) {
-	return (
-		policy.timeSeconds > 0 ||
-		(policy.timeIncrementSeconds > 0 && policy.timeIncrementBytes > 0)
+		config.storage.mode === "file" &&
+		registeredProvider !== undefined &&
+		isProviderSeedingEnabled(config, registeredProvider.id)
 	);
 }
 
@@ -191,13 +200,11 @@ function seedTotals(torrent: Torrent, seed: SeedState) {
 
 function updateSeedRecord(torrent: Torrent, data: TorrentData) {
 	if (!data.seed) return;
-	data.seed.seedSeconds++;
 	const record = seedRecords[torrent.infoHash];
 	if (!record) return;
 	const { uploaded, downloaded } = seedTotals(torrent, data.seed);
 	record.uploaded = uploaded;
 	record.downloaded = downloaded;
-	record.seedSeconds = data.seed.seedSeconds;
 	seedRecordsDirty = true;
 }
 
@@ -208,12 +215,8 @@ function initSeedState(
 	let record = seedRecords[torrent.infoHash];
 	if (!record) {
 		record = {
-			name: torrent.name,
-			size: torrent.length,
 			uploaded: 0,
 			downloaded: 0,
-			seedSeconds: 0,
-			addedAt: new Date().toISOString(),
 			files: [],
 			provider,
 		};
@@ -237,43 +240,7 @@ function initSeedState(
 		downloadedBase: record.downloaded,
 		uploadedOffset: torrent.uploaded,
 		downloadedOffset: torrent.downloaded,
-		seedSeconds: record.seedSeconds,
 	};
-}
-
-function requiredSeedSeconds(
-	policy: SeedPolicy,
-	uploaded: number,
-	downloaded: number,
-) {
-	let required = policy.timeSeconds;
-	if (policy.timeIncrementSeconds > 0 && policy.timeIncrementBytes > 0) {
-		required +=
-			(policy.timeIncrementSeconds * downloaded) / policy.timeIncrementBytes;
-	}
-	if (policy.ratioDiscount) {
-		const target = policy.ratio > 0 ? policy.ratio : 1;
-		const ratio = downloaded > 0 ? uploaded / downloaded : target;
-		required *= 1 - Math.min(ratio, target) / target;
-	}
-	return required;
-}
-
-function isSeedingComplete(torrent: Torrent) {
-	const seed = torrentData.get(torrent)?.seed;
-	if (!seed) return true;
-	const record = seedRecords[torrent.infoHash];
-	const policy = currentPolicy(record?.provider);
-	if (!policy?.enabled) return false;
-	const { uploaded, downloaded } = seedTotals(torrent, seed);
-	if (policy.ratio > 0 && uploaded >= downloaded * policy.ratio) return true;
-	if (
-		hasTimeTarget(policy) &&
-		seed.seedSeconds >= requiredSeedSeconds(policy, uploaded, downloaded)
-	) {
-		return true;
-	}
-	return false;
 }
 
 function dropSeedRecord(infoHash: string) {
@@ -360,42 +327,15 @@ function scheduleRemoval(torrent: Torrent) {
 	}, getRuntimeConfig().config.torrent.removeTimeout);
 }
 
-function checkSeedRequirements(torrent: Torrent) {
-	const data = torrentData.get(torrent);
-	if (!data?.seed || data.streams.size > 0) return;
-	const record = seedRecords[torrent.infoHash];
-	if (!isSeedingEnabled(record?.provider)) {
-		updateSeedRecord(torrent, data);
-		data.seed = undefined;
-		void destroyTorrentInternal(torrent, { preserveSeedState: true });
-		return;
-	}
-	if (!isSeedingComplete(torrent)) return;
-	logger.debug(
-		`Removing seeded torrent: ${torrent.name} (${torrent.infoHash})`,
-	);
-	void destroyTorrentInternal(torrent);
-}
-
 export function getSeedStats(torrent: Torrent) {
 	const data = torrentData.get(torrent);
 	if (!data?.seed) return undefined;
-	const record = seedRecords[torrent.infoHash];
-	const policy = currentPolicy(record?.provider);
-	if (!policy) return undefined;
 	const { uploaded, downloaded } = seedTotals(torrent, data.seed);
 	return {
-		seeding: data.streams.size === 0 && !isSeedingComplete(torrent),
+		seeding: data.streams.size === 0,
 		uploaded,
 		downloaded,
 		ratio: downloaded > 0 ? uploaded / downloaded : 0,
-		secondsRemaining: hasTimeTarget(policy)
-			? Math.max(
-					0,
-					requiredSeedSeconds(policy, uploaded, downloaded) -
-						data.seed.seedSeconds,
-				)
-			: undefined,
 	};
 }
 
@@ -404,19 +344,15 @@ export function registerTorrent(torrent: Torrent, provider?: string) {
 	const storageMode = getRuntimeConfig().config.storage.mode;
 	if (storageMode === "memory")
 		torrent.store = new TorrentStreamChunkStore(torrent);
-	const seed =
-		storageMode === "file" && isSeedingEnabled(provider)
-			? initSeedState(torrent, provider)
-			: undefined;
+	const seed = isSeedingEnabled(provider)
+		? initSeedState(torrent, provider)
+		: undefined;
 	torrentData.set(torrent, {
 		provider,
 		streams: new Map(),
 		speeds: new LRU(300),
 		seed,
 		streamedFiles: new Set(seedRecords[torrent.infoHash]?.files ?? []),
-	});
-	(torrent as unknown as TrackerAnnounceEmitter).on("trackerAnnounce", () => {
-		checkSeedRequirements(torrent);
 	});
 	logger.info(`Torrent added: ${torrent.name} (${torrent.infoHash})`);
 }
@@ -465,8 +401,7 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 	if (data.streams.size === 0) {
 		schedulePause(torrent);
-		if (data.seed) checkSeedRequirements(torrent);
-		else scheduleRemoval(torrent);
+		if (!data.seed) scheduleRemoval(torrent);
 	}
 }
 
@@ -515,9 +450,83 @@ function runGarbageCollection(reason: string) {
 	logger.debug(`GC triggered: ${reason}`);
 }
 
-export async function resumeSeedingTorrents() {
+function normalizeTorrentName(name: string) {
+	return name.trim().toLocaleLowerCase();
+}
+
+async function checkProviderSeedRequirements(provider: TorrentSearchProvider) {
+	let requiredNames: Set<string>;
+	try {
+		requiredNames = new Set(
+			(await provider.getSeedRequirements())
+				.map(normalizeTorrentName)
+				.filter((name) => name.length > 0),
+		);
+	} catch (error) {
+		logger.error(error);
+		return;
+	}
+	if (!shouldCheckSeedRequirements(provider)) return;
+
+	const torrents = getTorrentClient().torrents.filter((torrent) => {
+		const data = torrentData.get(torrent);
+		return (
+			data?.provider === provider.id &&
+			Boolean(data.seed) &&
+			data.streams.size === 0 &&
+			!requiredNames.has(normalizeTorrentName(torrent.name))
+		);
+	});
+
+	await Promise.all(
+		torrents.map(async (torrent) => {
+			logger.debug(
+				`Tracker no longer requires seeding, removing torrent: ${torrent.name} (${torrent.infoHash})`,
+			);
+			await destroyTorrentInternal(torrent);
+		}),
+	);
+}
+
+function shouldCheckSeedRequirements(provider: TorrentSearchProvider) {
+	const config = getRuntimeConfig().config;
+	return (
+		config.storage.mode === "file" &&
+		isProviderEnabled(config, provider.id) &&
+		isProviderSeedingEnabled(config, provider.id)
+	);
+}
+
+async function checkSeedRequirements() {
+	const enabledProviders = providers.filter(shouldCheckSeedRequirements);
+	await Promise.all(
+		enabledProviders.map((provider) => checkProviderSeedRequirements(provider)),
+	);
+}
+
+function stopSeedRequirementInterval() {
+	clearInterval(global.seedRequirementInterval);
+	global.seedRequirementInterval = undefined;
+}
+
+function startSeedRequirementInterval() {
+	stopSeedRequirementInterval();
 	if (getRuntimeConfig().config.storage.mode !== "file") return;
+	global.seedRequirementInterval = setInterval(
+		() => {
+			void checkSeedRequirements();
+		},
+		60 * 60 * 1000,
+	);
+}
+
+export async function resumeSeedingTorrents() {
+	stopSeedRequirementInterval();
+	if (getRuntimeConfig().config.storage.mode !== "file") {
+		return;
+	}
 	const torrentClient = getTorrentClient();
+	const resumed: Promise<void>[] = [];
 	for (const infoHash of Object.keys(seedRecords)) {
 		const record = seedRecords[infoHash];
 		if (!isSeedingEnabled(record.provider)) continue;
@@ -530,23 +539,43 @@ export async function resumeSeedingTorrents() {
 			dropSeedRecord(infoHash);
 			continue;
 		}
-		const torrent = torrentClient.add(
-			metainfo,
-			{
-				path: getRuntimeConfig().config.storage.path,
-				destroyStoreOnDestroy: true,
-				deselect: true,
-			},
-			(torrent) => {
-				registerTorrent(torrent, record.provider);
-				schedulePause(torrent);
-				logger.info(`Seeding resumed: ${torrent.name} (${torrent.infoHash})`);
-			},
+		resumed.push(
+			new Promise((resolve) => {
+				let timeout: NodeJS.Timeout;
+				const done = () => {
+					clearTimeout(timeout);
+					resolve();
+				};
+				timeout = setTimeout(
+					done,
+					getRuntimeConfig().config.torrent.addTimeout,
+				);
+				const torrent = torrentClient.add(
+					metainfo,
+					{
+						path: getRuntimeConfig().config.storage.path,
+						destroyStoreOnDestroy: true,
+						deselect: true,
+					},
+					(torrent) => {
+						registerTorrent(torrent, record.provider);
+						schedulePause(torrent);
+						logger.info(
+							`Seeding resumed: ${torrent.name} (${torrent.infoHash})`,
+						);
+						done();
+					},
+				);
+				torrent.once("error", () => {
+					logger.warn(`Resume failed, preserving seed record: ${infoHash}`);
+					done();
+				});
+			}),
 		);
-		torrent.once("error", () => {
-			logger.warn(`Resume failed, preserving seed record: ${infoHash}`);
-		});
 	}
+	await Promise.all(resumed);
+	await checkSeedRequirements();
+	startSeedRequirementInterval();
 	flushSeedRecords(true);
 }
 
@@ -606,7 +635,6 @@ export async function applyRuntimeTorrentConfig(previous: RuntimeConfig) {
 					continue;
 				}
 			}
-			if (data.seed) checkSeedRequirements(torrent);
 		}
 		if (!data.seed && data.streams.size === 0) scheduleRemoval(torrent);
 	}

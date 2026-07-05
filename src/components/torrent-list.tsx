@@ -11,7 +11,6 @@ import {
 	HardDriveDownload,
 	HardDriveUpload,
 	Subtitles,
-	Timer,
 	Trash2,
 	Upload,
 } from "lucide-react";
@@ -216,12 +215,6 @@ function TorrentCard({
 						<div className="flex items-center gap-2 text-muted-foreground">
 							<Gauge size={14} />
 							<FlipNumber>{torrent.ratio}</FlipNumber>
-						</div>
-					)}
-					{torrent.seedTimeRemaining !== undefined && (
-						<div className="flex items-center gap-2 text-muted-foreground">
-							<Timer size={14} />
-							<FlipNumber>{torrent.seedTimeRemaining}</FlipNumber>
 						</div>
 					)}
 					{showProgress && (

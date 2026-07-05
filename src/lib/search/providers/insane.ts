@@ -30,12 +30,32 @@ type InsaneCredentials = {
 };
 
 export class InsaneProvider extends TorrentSearchProvider {
-	id = "insane";
+	id = "insane" as const;
 	name = "iNSANE";
 
 	private fetch = makeFetchCookie(fetch);
 	private lastLoginCredentials?: InsaneCredentials;
 	private lastLoginDate?: number;
+
+	async getSeedRequirements() {
+		await this.login(this.getCredentials());
+		const response = await this.fetch(
+			"https://newinsane.info/hnr.php?type=active",
+			{
+				signal: AbortSignal.timeout(
+					getRuntimeConfig().config.search.requestTimeout,
+				),
+			},
+		);
+		if (!response.ok) {
+			throw new Error(`iNSANE H&R request failed (${response.status})`);
+		}
+		const $ = cheerio.load(await response.text());
+
+		return $('a.torrentname, a[href*="details.php"]')
+			.map((_index, element) => $(element).attr("title") ?? $(element).text())
+			.get();
+	}
 
 	async searchTorrentsByCategory(query: string, category: TorrentCategory) {
 		switch (category) {

@@ -1,4 +1,4 @@
-import { getRuntimeConfig } from "@/lib/config";
+import type { ProviderId } from "@/lib/config-schema";
 import { getEpisodeNumber } from "@/lib/episode";
 import { getReadableSize } from "@/lib/file";
 import { getFormats } from "@/lib/format";
@@ -109,8 +109,9 @@ export class TorrentSearchResult {
 }
 
 export abstract class TorrentSearchProvider {
-	abstract id: string;
+	abstract id: ProviderId;
 	abstract name: string;
+	trackers: { id: string; name: string }[] = [];
 
 	abstract searchTorrentsByCategory(
 		query: string,
@@ -119,10 +120,5 @@ export abstract class TorrentSearchProvider {
 		episode?: number,
 	): Promise<TorrentSearchResult[]>;
 
-	isEnabled() {
-		const providers = getRuntimeConfig().config.providers;
-		if (this.id === "ncore") return providers.ncore.enabled;
-		if (this.id === "insane") return providers.insane.enabled;
-		return false;
-	}
+	abstract getSeedRequirements(): Promise<string[]>;
 }

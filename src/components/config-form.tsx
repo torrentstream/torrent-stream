@@ -3,13 +3,10 @@
 import { Eye, EyeOff, GripVertical, RotateCcw, Save } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { type SaveConfigurationResult, saveConfiguration } from "@/app/actions";
-import {
-	getProviderName,
-	type ProviderId,
-	type RuntimeConfig,
-	type SearchSortCriterion,
-	type SeedPolicy,
-	type TorrentioSourceId,
+import type {
+	ProviderId,
+	RuntimeConfig,
+	SearchSortCriterion,
 } from "@/lib/config-schema";
 import { formatStrings, TorrentFormat } from "@/lib/format";
 import { supportedLanguages } from "@/lib/language";
@@ -38,6 +35,13 @@ interface Snapshot {
 	config: RuntimeConfig;
 	revision: string;
 	warning?: string;
+	providerOptions: ProviderOption[];
+}
+
+interface ProviderOption {
+	id: ProviderId;
+	name: string;
+	trackers: { id: string; name: string }[];
 }
 
 function cloneConfig(config: RuntimeConfig) {
@@ -92,6 +96,7 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			const snapshot = {
 				config: result.config,
 				revision: result.revision,
+				providerOptions: saved.providerOptions,
 			};
 			setSaved(snapshot);
 			setDraft(cloneConfig(result.config));
@@ -133,7 +138,11 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			<StorageCard config={draft} update={update} />
 			<TorrentCard config={draft} update={update} />
 			<SearchCard config={draft} update={update} />
-			<ProvidersCard config={draft} update={update} />
+			<ProvidersCard
+				config={draft}
+				providerOptions={saved.providerOptions}
+				update={update}
+			/>
 
 			<div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 backdrop-blur">
 				<div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
@@ -592,16 +601,22 @@ function SearchCard({
 
 function ProvidersCard({
 	config,
+	providerOptions,
 	update,
 }: {
 	config: RuntimeConfig;
+	providerOptions: ProviderOption[];
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
 	const fileMode = config.storage.mode === "file";
 	const torrentio = config.providers.torrentio;
+	const optionsById = new Map(
+		providerOptions.map((provider) => [provider.id, provider]),
+	);
 	const draggedProvider = useRef<ProviderId | undefined>(undefined);
 	const sortProps = (provider: ProviderId): ProviderSortProps => ({
 		provider,
+		name: optionsById.get(provider)?.name ?? provider,
 		draggedProvider,
 		onMove: (dragged, target) =>
 			update((next) => {
@@ -612,14 +627,14 @@ function ProvidersCard({
 	return (
 		<Section
 			title="Providers"
-			description="Use Torrentio for every public source, or turn it off and select individual sources."
+			description="Enable search providers and choose which sources Torrentio may use."
 		>
 			{config.search.providerOrder.map((provider) => {
 				if (provider === "ncore" || provider === "insane") {
 					return (
 						<PrivateProvider
 							key={provider}
-							name={getProviderName(provider)}
+							name={optionsById.get(provider)?.name ?? provider}
 							config={config.providers[provider]}
 							fileMode={fileMode}
 							sort={sortProps(provider)}
@@ -636,29 +651,27 @@ function ProvidersCard({
 					return (
 						<ProviderBox key={provider} sort={sortProps(provider)}>
 							<Toggle
-								label={getProviderName(provider)}
+								label={optionsById.get(provider)?.name ?? provider}
 								checked={torrentio.enabled}
 								onChange={(checked) =>
 									update((next) => {
 										next.providers.torrentio.enabled = checked;
-										for (const source of config.search.providerOrder) {
-											if (
-												source !== "ncore" &&
-												source !== "insane" &&
-												source !== "torrentio"
-											) {
-												next.providers[source].enabled = false;
-											}
-										}
 									})
 								}
 							/>
-							{fileMode && torrentio.enabled && (
-								<SeedPolicyControl
-									policy={torrentio.seed}
-									onChange={(policy) =>
+							{torrentio.enabled && (
+								<TorrentioTrackers
+									trackers={optionsById.get(provider)?.trackers ?? []}
+									selected={torrentio.sources}
+									allTrackers={torrentio.allTrackers}
+									onAllTrackersChange={(allTrackers) =>
 										update((next) => {
-											next.providers.torrentio.seed = policy;
+											next.providers.torrentio.allTrackers = allTrackers;
+										})
+									}
+									onChange={(sources) =>
+										update((next) => {
+											next.providers.torrentio.sources = sources;
 										})
 									}
 								/>
@@ -666,40 +679,55 @@ function ProvidersCard({
 						</ProviderBox>
 					);
 				}
-
-				const source: TorrentioSourceId = provider;
-				const sourceConfig = config.providers[source];
-				return (
-					<ProviderBox
-						key={source}
-						disabled={torrentio.enabled}
-						sort={sortProps(source)}
-					>
-						<Toggle
-							label={getProviderName(source)}
-							checked={torrentio.enabled ? false : sourceConfig.enabled}
-							disabled={torrentio.enabled}
-							onChange={(checked) =>
-								update((next) => {
-									next.providers[source].enabled = checked;
-									if (checked) next.providers.torrentio.enabled = false;
-								})
-							}
-						/>
-						{fileMode && sourceConfig.enabled && !torrentio.enabled && (
-							<SeedPolicyControl
-								policy={sourceConfig.seed}
-								onChange={(policy) =>
-									update((next) => {
-										next.providers[source].seed = policy;
-									})
-								}
-							/>
-						)}
-					</ProviderBox>
-				);
+				return null;
 			})}
 		</Section>
+	);
+}
+
+function TorrentioTrackers({
+	trackers,
+	selected,
+	allTrackers,
+	onAllTrackersChange,
+	onChange,
+}: {
+	trackers: { id: string; name: string }[];
+	selected: string[];
+	allTrackers: boolean;
+	onAllTrackersChange: (enabled: boolean) => void;
+	onChange: (sources: string[]) => void;
+}) {
+	return (
+		<div className="mt-4 border-t pt-4">
+			<Toggle
+				label="Enable all trackers"
+				checked={allTrackers}
+				onChange={onAllTrackersChange}
+			/>
+			<div
+				className={`mt-3 flex flex-wrap gap-2 transition-opacity ${
+					allTrackers ? "opacity-50" : ""
+				}`}
+			>
+				{trackers.map((tracker) => (
+					<Chip
+						key={tracker.id}
+						selected={allTrackers || selected.includes(tracker.id)}
+						disabled={allTrackers}
+						onClick={() =>
+							onChange(
+								selected.includes(tracker.id)
+									? selected.filter((id) => id !== tracker.id)
+									: [...selected, tracker.id],
+							)
+						}
+					>
+						{tracker.name}
+					</Chip>
+				))}
+			</div>
+		</div>
 	);
 }
 
@@ -760,11 +788,13 @@ function PrivateProvider({
 					/>
 					{fileMode && (
 						<div className="sm:col-span-2">
-							<SeedPolicyControl
-								policy={config.seed}
-								onChange={(policy) =>
+							<Toggle
+								label="Enable seeding"
+								description="Keep torrents active until the provider no longer lists them as requiring seed."
+								checked={config.seeding}
+								onChange={(seeding) =>
 									change((next) => {
-										next.seed = policy;
+										next.seeding = seeding;
 									})
 								}
 							/>
@@ -773,117 +803,6 @@ function PrivateProvider({
 				</div>
 			)}
 		</ProviderBox>
-	);
-}
-
-function SeedPolicyControl({
-	policy,
-	onChange,
-}: {
-	policy: SeedPolicy;
-	onChange: (policy: SeedPolicy) => void;
-}) {
-	const setEnabled = (enabled: boolean) => {
-		const next = structuredClone(policy);
-		next.enabled = enabled;
-		if (enabled && next.ratio === 0 && next.timeSeconds === 0) next.ratio = 1;
-		onChange(next);
-	};
-	return (
-		<div className="mt-4 border-t pt-4">
-			<Toggle
-				label="Enable seeding"
-				checked={policy.enabled}
-				onChange={setEnabled}
-			/>
-			{policy.enabled && <SeedEditor policy={policy} onChange={onChange} />}
-		</div>
-	);
-}
-
-function SeedEditor({
-	policy,
-	onChange,
-}: {
-	policy: SeedPolicy;
-	onChange: (policy: SeedPolicy) => void;
-}) {
-	const change = (recipe: (next: SeedPolicy) => void) => {
-		const next = structuredClone(policy);
-		recipe(next);
-		onChange(next);
-	};
-	return (
-		<div className="mt-3 grid gap-4 rounded-lg bg-muted/40 p-3 sm:grid-cols-2">
-			<NumberField
-				label="Ratio target"
-				description="Use 0 to disable ratio completion."
-				value={policy.ratio}
-				min={0}
-				step="any"
-				onChange={(value) =>
-					change((next) => {
-						next.ratio = value;
-					})
-				}
-			/>
-			<NumberField
-				label="Time target"
-				description="Use 0 to disable time completion."
-				value={policy.timeSeconds}
-				unit="seconds"
-				min={0}
-				step={1}
-				onChange={(value) =>
-					change((next) => {
-						next.timeSeconds = value;
-					})
-				}
-			/>
-			{policy.timeSeconds > 0 && (
-				<>
-					<NumberField
-						label="Extra time per"
-						description="The amount of downloaded data that adds the extra time."
-						value={policy.timeIncrementBytes}
-						unit="bytes"
-						min={1}
-						step={1}
-						onChange={(value) =>
-							change((next) => {
-								next.timeIncrementBytes = value;
-							})
-						}
-					/>
-					<NumberField
-						label="Extra time added"
-						description="Added for every configured downloaded amount."
-						value={policy.timeIncrementSeconds}
-						unit="seconds"
-						min={0}
-						step={1}
-						onChange={(value) =>
-							change((next) => {
-								next.timeIncrementSeconds = value;
-							})
-						}
-					/>
-					<Toggle
-						label="Ratio time discount"
-						description="Reduce required time as upload ratio approaches its target."
-						checked={policy.ratioDiscount}
-						onChange={(checked) =>
-							change((next) => {
-								next.ratioDiscount = checked;
-							})
-						}
-					/>
-				</>
-			)}
-			<p className="text-xs text-muted-foreground sm:col-span-2">
-				The torrent is released when either its ratio or time target is met.
-			</p>
-		</div>
 	);
 }
 
@@ -909,27 +828,22 @@ function Section({
 
 interface ProviderSortProps {
 	provider: ProviderId;
+	name: string;
 	draggedProvider: React.RefObject<ProviderId | undefined>;
 	onMove: (dragged: ProviderId, target: ProviderId) => void;
 }
 
 function ProviderBox({
 	children,
-	disabled = false,
 	sort,
 }: {
 	children: React.ReactNode;
-	disabled?: boolean;
 	sort?: ProviderSortProps;
 }) {
 	return (
 		<fieldset
-			aria-label={
-				sort ? `${getProviderName(sort.provider)} provider` : undefined
-			}
-			className={`rounded-xl border p-4 transition-opacity ${
-				disabled ? "opacity-50" : ""
-			}`}
+			aria-label={sort ? `${sort.name} provider` : undefined}
+			className="rounded-xl border p-4"
 			onDragEnter={(event) => {
 				if (!sort) return;
 				const dragged = sort.draggedProvider.current;
@@ -951,7 +865,7 @@ function ProviderBox({
 					<button
 						type="button"
 						draggable
-						aria-label={`Reorder ${getProviderName(sort.provider)}`}
+						aria-label={`Reorder ${sort.name}`}
 						className="mt-0.5 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
 						onDragStart={(event) => {
 							sort.draggedProvider.current = sort.provider;
@@ -1176,6 +1090,7 @@ function PasswordField({
 function Chip({
 	selected,
 	onClick,
+	disabled = false,
 	draggable = false,
 	onDragStart,
 	onDragEnter,
@@ -1186,6 +1101,7 @@ function Chip({
 }: {
 	selected: boolean;
 	onClick: () => void;
+	disabled?: boolean;
 	draggable?: boolean;
 	onDragStart?: React.DragEventHandler<HTMLButtonElement>;
 	onDragEnter?: React.DragEventHandler<HTMLButtonElement>;
@@ -1199,13 +1115,14 @@ function Chip({
 			type="button"
 			aria-pressed={selected}
 			onClick={onClick}
+			disabled={disabled}
 			draggable={draggable}
 			onDragStart={onDragStart}
 			onDragEnter={onDragEnter}
 			onDragOver={onDragOver}
 			onDrop={onDrop}
 			onDragEnd={onDragEnd}
-			className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition ${
+			className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed ${
 				draggable ? "cursor-grab active:cursor-grabbing " : ""
 			}${
 				selected

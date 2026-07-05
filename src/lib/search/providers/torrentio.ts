@@ -1,5 +1,4 @@
 import { getRuntimeConfig } from "@/lib/config";
-import { torrentioSourceIds } from "@/lib/config-schema";
 import { logger } from "@/lib/logger";
 import {
 	type StremioStream,
@@ -8,9 +7,40 @@ import {
 	TorrentSearchResult,
 } from "@/lib/search/types";
 
+const torrentioTrackers = [
+	{ id: "yts", name: "YTS" },
+	{ id: "eztv", name: "EZTV" },
+	{ id: "rarbg", name: "RARBG" },
+	{ id: "1337x", name: "1337x" },
+	{ id: "thepiratebay", name: "The Pirate Bay" },
+	{ id: "kickasstorrents", name: "KickassTorrents" },
+	{ id: "torrentgalaxy", name: "TorrentGalaxy" },
+	{ id: "magnetdl", name: "MagnetDL" },
+	{ id: "horriblesubs", name: "HorribleSubs" },
+	{ id: "nyaasi", name: "Nyaa.si" },
+	{ id: "tokyotosho", name: "Tokyo Toshokan" },
+	{ id: "anidex", name: "AniDex" },
+	{ id: "rutor", name: "Rutor" },
+	{ id: "rutracker", name: "RuTracker" },
+	{ id: "comando", name: "Comando" },
+	{ id: "bludv", name: "BluDV" },
+	{ id: "micoleaodublado", name: "Mico Leão Dublado" },
+	{ id: "torrent9", name: "Torrent9" },
+	{ id: "ilcorsaronero", name: "Il Corsaro Nero" },
+	{ id: "mejortorrent", name: "MejorTorrent" },
+	{ id: "wolfmax4k", name: "WolfMax4K" },
+	{ id: "cinecalidad", name: "CineCalidad" },
+	{ id: "besttorrents", name: "BestTorrents" },
+] as const;
+
+const torrentioTrackerIds = new Set<string>(
+	torrentioTrackers.map(({ id }) => id),
+);
+
 export class TorrentioProvider extends TorrentSearchProvider {
-	id = "torrentio";
+	id = "torrentio" as const;
 	name = "Torrentio";
+	override trackers = torrentioTrackers.map((tracker) => ({ ...tracker }));
 
 	async searchTorrentsByCategory(
 		query: string,
@@ -18,13 +48,14 @@ export class TorrentioProvider extends TorrentSearchProvider {
 		season?: number,
 		episode?: number,
 	) {
-		const providers = this.enabledProviders();
+		const trackers = this.enabledTrackers();
+		if (!this.allTrackersEnabled() && trackers.length === 0) return [];
 
 		switch (category) {
 			case TorrentCategory.Movie:
-				return this.searchTorrents(providers, "movie", query);
+				return this.searchTorrents(trackers, "movie", query);
 			case TorrentCategory.Series:
-				return this.searchTorrents(providers, "tv", query, season, episode);
+				return this.searchTorrents(trackers, "tv", query, season, episode);
 		}
 	}
 
@@ -43,7 +74,7 @@ export class TorrentioProvider extends TorrentSearchProvider {
 
 			const url = [
 				`https://torrentio.strem.fun`,
-				...(this.allProvidersEnabled() ? [] : [configParam]),
+				...(this.allTrackersEnabled() ? [] : [configParam]),
 				`stream`,
 				category,
 				json,
@@ -70,13 +101,6 @@ export class TorrentioProvider extends TorrentSearchProvider {
 
 				const tracker =
 					stream.title?.split("⚙️ ")[1]?.split("\n")[0] || "Torrentio";
-				const sourceProvider = torrentioSourceIds.find(
-					(provider) => provider.toLowerCase() === tracker.toLowerCase(),
-				);
-				const provider = this.aggregateEnabled()
-					? this.id
-					: (sourceProvider ?? "torrentio-unknown");
-
 				const category = stream.name.split("\n")[1] || undefined;
 
 				const size = this.parseSize(
@@ -105,7 +129,7 @@ export class TorrentioProvider extends TorrentSearchProvider {
 						size,
 						seeds,
 						magnet,
-						provider,
+						provider: this.id,
 					}),
 				);
 			}
@@ -116,23 +140,18 @@ export class TorrentioProvider extends TorrentSearchProvider {
 		return torrents;
 	}
 
-	override isEnabled(): boolean {
-		const torrentio = getRuntimeConfig().config.providers.torrentio;
-		return torrentio.enabled || this.enabledProviders().length > 0;
+	override async getSeedRequirements() {
+		return [];
 	}
 
-	private allProvidersEnabled() {
-		return this.aggregateEnabled();
+	private allTrackersEnabled() {
+		return getRuntimeConfig().config.providers.torrentio.allTrackers;
 	}
 
-	private enabledProviders() {
-		if (this.aggregateEnabled()) return [...torrentioSourceIds];
-		const providers = getRuntimeConfig().config.providers;
-		return torrentioSourceIds.filter((provider) => providers[provider].enabled);
-	}
-
-	private aggregateEnabled() {
-		return getRuntimeConfig().config.providers.torrentio.enabled;
+	private enabledTrackers() {
+		return getRuntimeConfig().config.providers.torrentio.sources.filter(
+			(source) => torrentioTrackerIds.has(source),
+		);
 	}
 
 	private parseSize(size: string | undefined) {
