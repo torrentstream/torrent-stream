@@ -5,7 +5,7 @@ import {
 	randomBytes,
 } from "node:crypto";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
-import { deploymentConfig } from "./config";
+import { deploymentConfig } from "./config/runtime";
 
 const algorithm = "aes-256-cbc";
 const ivLength = 16;

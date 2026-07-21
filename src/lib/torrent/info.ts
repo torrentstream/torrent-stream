@@ -1,14 +1,78 @@
+import MemoryChunkStore from "memory-chunk-store";
 import type { Torrent, TorrentFile } from "webtorrent";
-import { getEpisodeNumber } from "@/lib/episode";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { createLimit } from "@/lib/limit";
+import { LRU } from "@/lib/lru";
+import { getEpisodeNumber } from "@/lib/media/episode";
 import {
 	getReadableProgress,
 	getReadableSize,
 	getReadableSpeed,
 	isSubtitleFile,
 	isVideoFile,
-} from "@/lib/file";
-import { getFormats, type TorrentFormat } from "@/lib/format";
+} from "@/lib/media/file";
+import { getFormats, type TorrentFormat } from "@/lib/media/format";
+import { getInfoClient } from "./clients";
 import { getHistoricalSpeeds, getStreamedFiles, getStreams } from "./streams";
+
+const torrentInfoCache = new LRU<string, Promise<TorrentInfo | undefined>>(500);
+const limitFetchTorrentInfo = createLimit(10);
+
+export function getTorrentInfo(uri: string) {
+	const cached = torrentInfoCache.get(uri);
+	if (cached) return cached;
+
+	const promise = limitFetchTorrentInfo(() => fetchTorrentInfo(uri)).then(
+		(info) => {
+			if (!info) torrentInfoCache.delete(uri);
+			return info;
+		},
+	);
+
+	torrentInfoCache.put(uri, promise);
+	return promise;
+}
+
+function fetchTorrentInfo(uri: string) {
+	return new Promise<TorrentInfo | undefined>((resolve) => {
+		let completed = false;
+
+		const onTorrent = (torrent: Torrent) => {
+			if (completed) return;
+			if (torrent.destroyed) {
+				completed = true;
+				clearTimeout(timeout);
+				resolve(undefined);
+				return;
+			}
+			if (!torrent.ready) {
+				torrent.once("ready", () => onTorrent(torrent));
+				return;
+			}
+			completed = true;
+			clearTimeout(timeout);
+			const info = new TorrentInfo(torrent);
+			torrent.destroy();
+			resolve(info);
+		};
+
+		const torrent = getInfoClient().add(
+			uri,
+			{
+				store: MemoryChunkStore,
+				destroyStoreOnDestroy: true,
+			},
+			onTorrent,
+		);
+
+		const timeout = setTimeout(() => {
+			if (completed) return;
+			completed = true;
+			torrent.destroy();
+			resolve(undefined);
+		}, getRuntimeConfig().config.torrent.addTimeout);
+	});
+}
 
 export class TorrentInfo {
 	name: string;

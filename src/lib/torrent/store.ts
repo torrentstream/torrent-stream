@@ -1,6 +1,6 @@
 import type { ChunkStore, Torrent } from "webtorrent";
-import { getRuntimeConfig } from "@/lib/config";
-import { logger } from "@/lib/logger";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { logger } from "@/lib/logging/logger";
 import { LRU } from "@/lib/lru";
 import { getStreams } from "./streams";
 

@@ -1,13 +1,13 @@
 import * as cheerio from "cheerio";
-import makeFetchCookie from "fetch-cookie";
-import { getRuntimeConfig } from "@/lib/config";
-import { isImdbId } from "@/lib/imdb";
-import { logger } from "@/lib/logger";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { logger } from "@/lib/logging/logger";
+import { isImdbId } from "@/lib/media/imdb";
+import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import { TorrentSearchResult } from "@/lib/search/result";
 import {
-	TorrentCategory,
-	TorrentSearchProvider,
-	TorrentSearchResult,
-} from "@/lib/search/types";
+	AuthenticatedSession,
+	type SessionCredentials,
+} from "@/lib/search/session";
 
 enum NcoreCategory {
 	Film_SD_HU = "xvid_hun",
@@ -20,28 +20,35 @@ enum NcoreCategory {
 	Sorozat_HD_EN = "hdser",
 }
 
-type NcoreCredentials = {
-	username: string;
-	password: string;
-};
+type NcoreCredentials = SessionCredentials;
 
 export class NcoreProvider extends TorrentSearchProvider {
 	id = "ncore" as const;
 	name = "nCore";
 
-	private fetch = makeFetchCookie(fetch);
-	private lastLoginCredentials?: NcoreCredentials;
-	private lastLoginDate?: number;
+	private session = new AuthenticatedSession({
+		name: this.name,
+		origin: "https://ncore.pro",
+		loginUrl: "https://ncore.pro/login.php",
+		requestTimeout: () => getRuntimeConfig().config.search.requestTimeout,
+		createLoginBody: (credentials) => {
+			const formData = new FormData();
+			formData.append("nev", credentials.username);
+			formData.append("pass", credentials.password);
+			formData.append("set_lang", "hu");
+			formData.append("submitted", "1");
+			return formData;
+		},
+		isLoginSuccessful: (_response, redirectUrl) =>
+			Boolean(redirectUrl && redirectUrl.pathname !== "/login.php"),
+		isLoginRedirect: (redirectUrl) => redirectUrl?.pathname === "/login.php",
+	});
 
 	async getSeedRequirements() {
-		await this.login(this.getCredentials());
-		const response = await this.fetch(
+		const credentials = this.getCredentials();
+		const response = await this.session.fetch(
 			"https://ncore.pro/hitnrun.php?showall=false",
-			{
-				signal: AbortSignal.timeout(
-					getRuntimeConfig().config.search.requestTimeout,
-				),
-			},
+			credentials,
 		);
 		if (!response.ok) {
 			throw new Error(`nCore H&R request failed (${response.status})`);
@@ -87,7 +94,6 @@ export class NcoreProvider extends TorrentSearchProvider {
 
 		try {
 			const credentials = ncoreCredentials ?? this.getCredentials();
-			await this.login(credentials);
 
 			const imdb = isImdbId(query) ? query : undefined;
 
@@ -109,11 +115,7 @@ export class NcoreProvider extends TorrentSearchProvider {
 				});
 
 				const link = `https://ncore.pro/torrents.php?${params.toString()}`;
-				const torrentsPage = await this.fetch(link, {
-					signal: AbortSignal.timeout(
-						getRuntimeConfig().config.search.requestTimeout,
-					),
-				});
+				const torrentsPage = await this.session.fetch(link, credentials);
 				const $ = cheerio.load(await torrentsPage.text());
 
 				const rssUrl = $("link[rel=alternate]").attr("href");
@@ -162,40 +164,6 @@ export class NcoreProvider extends TorrentSearchProvider {
 		}
 
 		return torrents;
-	}
-
-	private async login(credentials: NcoreCredentials) {
-		const sessionTimeout = 15 * 60 * 1000; // 15 minutes
-
-		// Check if we need to re-login
-		if (
-			this.lastLoginCredentials &&
-			this.lastLoginCredentials.username === credentials.username &&
-			this.lastLoginCredentials.password === credentials.password &&
-			this.lastLoginDate &&
-			Date.now() - this.lastLoginDate < sessionTimeout
-		) {
-			return;
-		}
-
-		this.fetch = makeFetchCookie(fetch);
-
-		const formData = new FormData();
-		formData.append("nev", credentials.username);
-		formData.append("pass", credentials.password);
-		formData.append("set_lang", "hu");
-		formData.append("submitted", "1");
-
-		await this.fetch("https://ncore.pro/login.php", {
-			method: "POST",
-			body: formData,
-			signal: AbortSignal.timeout(
-				getRuntimeConfig().config.search.requestTimeout,
-			),
-		});
-
-		this.lastLoginCredentials = credentials;
-		this.lastLoginDate = Date.now();
 	}
 
 	private getCredentials() {

@@ -1,7 +1,7 @@
-import type { TorrentSearchProvider } from "@/lib/search/types";
-import { InsaneProvider } from "./insane";
-import { NcoreProvider } from "./ncore";
-import { TorrentioProvider } from "./torrentio";
+import type { TorrentSearchProvider } from "./provider";
+import { InsaneProvider } from "./providers/insane";
+import { NcoreProvider } from "./providers/ncore";
+import { TorrentioProvider } from "./providers/torrentio";
 
 const torrentioProvider = new TorrentioProvider();
 const ncoreProvider = new NcoreProvider();

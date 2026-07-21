@@ -1,19 +1,35 @@
 import { randomBytes } from "node:crypto";
-import { getRuntimeConfig } from "@/lib/config";
-import { isProviderEnabled } from "@/lib/config-schema";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { isProviderEnabled } from "@/lib/config/schema";
 import { encryptText } from "@/lib/encryption";
-import { getReadableSize } from "@/lib/file";
-import { getFormats, TorrentFormat } from "@/lib/format";
-import { logger } from "@/lib/logger";
-import { getTorrentInfo } from "@/lib/torrent";
+import { logger } from "@/lib/logging/logger";
+import { getReadableSize } from "@/lib/media/file";
+import { getFormats, TorrentFormat } from "@/lib/media/format";
+import { getTorrentInfo, type TorrentInfo } from "@/lib/torrent/info";
 import { serializeTorrentRequest } from "@/lib/torrent/request";
-import type { TorrentInfo } from "@/lib/torrent/types";
-import { providers } from "./providers";
-import {
-	type StremioStream,
-	TorrentCategory,
-	type TorrentSearchResult,
-} from "./types";
+import { TorrentCategory } from "./provider";
+import { providers } from "./provider-registry";
+import type { TorrentSearchResult } from "./result";
+
+export type StremioStream = {
+	name: string;
+	title?: string;
+	description?: string;
+	url?: string;
+	infoHash?: string;
+	fileIdx?: number;
+	sources?: string[];
+	subtitles?: {
+		id: string;
+		url: string;
+		lang: string;
+	}[];
+	behaviorHints?: {
+		bingeGroup?: string;
+		filename?: string;
+		videoSize?: number;
+	};
+};
 
 export async function getStremioStreams(
 	endpoint: string,

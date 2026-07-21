@@ -1,11 +1,8 @@
-import { getRuntimeConfig } from "@/lib/config";
-import { logger } from "@/lib/logger";
-import {
-	type StremioStream,
-	TorrentCategory,
-	TorrentSearchProvider,
-	TorrentSearchResult,
-} from "@/lib/search/types";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { logger } from "@/lib/logging/logger";
+import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import { TorrentSearchResult } from "@/lib/search/result";
+import type { StremioStream } from "@/lib/search/stremio";
 
 const torrentioTrackers = [
 	{ id: "yts", name: "YTS" },

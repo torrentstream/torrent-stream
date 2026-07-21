@@ -8,16 +8,16 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { Torrent, TorrentFile } from "webtorrent";
-import { deploymentConfig, getRuntimeConfig } from "@/lib/config";
+import { deploymentConfig, getRuntimeConfig } from "@/lib/config/runtime";
 import {
 	isProviderEnabled,
 	isProviderSeedingEnabled,
 	type RuntimeConfig,
-} from "@/lib/config-schema";
-import { logger } from "@/lib/logger";
+} from "@/lib/config/schema";
+import { logger } from "@/lib/logging/logger";
 import { LRU } from "@/lib/lru";
-import { getProvider, providers } from "@/lib/search/providers";
-import type { TorrentSearchProvider } from "@/lib/search/types";
+import type { TorrentSearchProvider } from "@/lib/search/provider";
+import { getProvider, providers } from "@/lib/search/provider-registry";
 import {
 	applyTransferLimits,
 	getTorrentClient,

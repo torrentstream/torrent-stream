@@ -7,9 +7,9 @@ import type {
 	ProviderId,
 	RuntimeConfig,
 	SearchSortCriterion,
-} from "@/lib/config-schema";
-import { formatStrings, TorrentFormat } from "@/lib/format";
-import { supportedLanguages } from "@/lib/language";
+} from "@/lib/config/schema";
+import { formatStrings, TorrentFormat } from "@/lib/media/format";
+import { supportedLanguages } from "@/lib/media/language";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import {

@@ -1,7 +1,7 @@
 import type { Instance } from "webtorrent";
 import WebTorrent from "webtorrent";
-import { getRuntimeConfig } from "@/lib/config";
-import { logger } from "@/lib/logger";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { logger } from "@/lib/logging/logger";
 
 declare global {
 	var torrentClientInstance: Instance | undefined;

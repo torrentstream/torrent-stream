@@ -1,10 +1,11 @@
 "use server";
 
-import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config";
-import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config-schema";
-import { getReadableSize } from "@/lib/file";
-import { getProviderName, providers } from "@/lib/search/providers";
+import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config/runtime";
+import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config/schema";
+import { getReadableSize } from "@/lib/media/file";
+import { getProviderName, providers } from "@/lib/search/provider-registry";
 import { getTorrentClient } from "@/lib/torrent/clients";
+import { TorrentInfo } from "@/lib/torrent/info";
 import {
 	applyRuntimeTorrentConfig,
 	destroyTorrent,
@@ -12,7 +13,6 @@ import {
 	getStreams,
 	getTorrentProvider,
 } from "@/lib/torrent/streams";
-import { TorrentInfo } from "@/lib/torrent/types";
 
 export interface TorrentStats {
 	torrents: {

@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { getRuntimeConfig } from "@/lib/config";
+import { getRuntimeConfig } from "@/lib/config/runtime";
 import { decryptText } from "@/lib/encryption";
-import { getStreamingMimeType } from "@/lib/file";
-import { getOrAddTorrent, getReadableStream } from "@/lib/torrent";
+import { getStreamingMimeType } from "@/lib/media/file";
+import { getOrAddTorrent, getReadableStream } from "@/lib/torrent/playback";
 import { parseTorrentRequest } from "@/lib/torrent/request";
 
 export async function GET(

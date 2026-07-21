@@ -1,5 +1,5 @@
-import { TorrentFormat } from "./format";
-import { supportedLanguages } from "./language";
+import { TorrentFormat } from "../media/format";
+import { supportedLanguages } from "../media/language";
 
 export const providerIds = [
 	"ncore",

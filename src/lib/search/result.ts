@@ -1,33 +1,7 @@
-import type { ProviderId } from "@/lib/config-schema";
-import { getEpisodeNumber } from "@/lib/episode";
-import { getReadableSize } from "@/lib/file";
-import { getFormats } from "@/lib/format";
-import { getLanguage } from "@/lib/language";
-
-export enum TorrentCategory {
-	Movie = "movie",
-	Series = "series",
-}
-
-export type StremioStream = {
-	name: string;
-	title?: string;
-	description?: string;
-	url?: string;
-	infoHash?: string;
-	fileIdx?: number;
-	sources?: string[];
-	subtitles?: {
-		id: string;
-		url: string;
-		lang: string;
-	}[];
-	behaviorHints?: {
-		bingeGroup?: string;
-		filename?: string;
-		videoSize?: number;
-	};
-};
+import { getEpisodeNumber } from "@/lib/media/episode";
+import { getReadableSize } from "@/lib/media/file";
+import { getFormats } from "@/lib/media/format";
+import { getLanguage } from "@/lib/media/language";
 
 type TorrentSearchResultParams = Pick<
 	TorrentSearchResult,
@@ -106,19 +80,4 @@ export class TorrentSearchResult {
 		}
 		return false;
 	}
-}
-
-export abstract class TorrentSearchProvider {
-	abstract id: ProviderId;
-	abstract name: string;
-	trackers: { id: string; name: string }[] = [];
-
-	abstract searchTorrentsByCategory(
-		query: string,
-		category: TorrentCategory,
-		season?: number,
-		episode?: number,
-	): Promise<TorrentSearchResult[]>;
-
-	abstract getSeedRequirements(): Promise<string[]>;
 }

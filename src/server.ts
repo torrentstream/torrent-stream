@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import { parse } from "node:url";
 import next from "next";
-import { deploymentConfig } from "./lib/config";
-import { logger } from "./lib/logger";
+import { deploymentConfig } from "./lib/config/runtime";
+import { logger } from "./lib/logging/logger";
 
 const { port, dev } = deploymentConfig;
 const app = next({ dev });

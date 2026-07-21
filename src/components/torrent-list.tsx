@@ -34,7 +34,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { getReadableSpeed, roundSpeed } from "@/lib/file";
+import { getReadableSpeed, roundSpeed } from "@/lib/media/file";
 import { FlipNumber } from "./flip-number";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";

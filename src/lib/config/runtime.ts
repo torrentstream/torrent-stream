@@ -8,13 +8,13 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { loadEnvConfig } from "@next/env";
+import { parseEnum } from "../enum";
+import { LogLevel } from "../logging/level";
 import {
 	createDefaultRuntimeConfig,
 	parseRuntimeConfig,
 	type RuntimeConfig,
-} from "./config-schema";
-import { parseEnum } from "./enum";
-import { LogLevel } from "./logger-level";
+} from "./schema";
 
 loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 

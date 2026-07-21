@@ -1,5 +1,5 @@
 import pino from "pino";
-import { deploymentConfig } from "./config";
+import { deploymentConfig } from "../config/runtime";
 
 const { logLevel, dev } = deploymentConfig;
 

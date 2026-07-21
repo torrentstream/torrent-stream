@@ -1,13 +1,13 @@
 import * as cheerio from "cheerio";
-import makeFetchCookie from "fetch-cookie";
-import { getRuntimeConfig } from "@/lib/config";
-import { isImdbId } from "@/lib/imdb";
-import { logger } from "@/lib/logger";
+import { getRuntimeConfig } from "@/lib/config/runtime";
+import { logger } from "@/lib/logging/logger";
+import { isImdbId } from "@/lib/media/imdb";
+import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import { TorrentSearchResult } from "@/lib/search/result";
 import {
-	TorrentCategory,
-	TorrentSearchProvider,
-	TorrentSearchResult,
-} from "@/lib/search/types";
+	AuthenticatedSession,
+	type SessionCredentials,
+} from "@/lib/search/session";
 
 enum InsaneCategory {
 	Film_Hun_SD = 41,
@@ -24,28 +24,32 @@ enum InsaneCategory {
 	Sorozat_Eng_UHD = 46,
 }
 
-type InsaneCredentials = {
-	username: string;
-	password: string;
-};
+type InsaneCredentials = SessionCredentials;
 
 export class InsaneProvider extends TorrentSearchProvider {
 	id = "insane" as const;
 	name = "iNSANE";
 
-	private fetch = makeFetchCookie(fetch);
-	private lastLoginCredentials?: InsaneCredentials;
-	private lastLoginDate?: number;
+	private session = new AuthenticatedSession({
+		name: this.name,
+		origin: "https://newinsane.info",
+		loginUrl: "https://newinsane.info/login.php",
+		requestTimeout: () => getRuntimeConfig().config.search.requestTimeout,
+		createLoginBody: (credentials) => {
+			const formData = new FormData();
+			formData.append("username", credentials.username);
+			formData.append("password", credentials.password);
+			return formData;
+		},
+		isLoginSuccessful: (response) => response.status === 302,
+		isLoginRedirect: (redirectUrl) => redirectUrl?.pathname === "/login.php",
+	});
 
 	async getSeedRequirements() {
-		await this.login(this.getCredentials());
-		const response = await this.fetch(
+		const credentials = this.getCredentials();
+		const response = await this.session.fetch(
 			"https://newinsane.info/hnr.php?type=active",
-			{
-				signal: AbortSignal.timeout(
-					getRuntimeConfig().config.search.requestTimeout,
-				),
-			},
+			credentials,
 		);
 		if (!response.ok) {
 			throw new Error(`iNSANE H&R request failed (${response.status})`);
@@ -89,7 +93,6 @@ export class InsaneProvider extends TorrentSearchProvider {
 
 		try {
 			const credentials = insaneCredentials ?? this.getCredentials();
-			await this.login(credentials);
 
 			const imdb = isImdbId(query) ? query : undefined;
 
@@ -111,11 +114,7 @@ export class InsaneProvider extends TorrentSearchProvider {
 				}
 
 				const link = `https://newinsane.info/browse.php?${params.toString()}`;
-				const torrentsPage = await this.fetch(link, {
-					signal: AbortSignal.timeout(
-						getRuntimeConfig().config.search.requestTimeout,
-					),
-				});
+				const torrentsPage = await this.session.fetch(link, credentials);
 				const $ = cheerio.load(await torrentsPage.text());
 
 				for (const el of $("tr.torrentrow")) {
@@ -157,38 +156,6 @@ export class InsaneProvider extends TorrentSearchProvider {
 		}
 
 		return torrents;
-	}
-
-	private async login(credentials: InsaneCredentials) {
-		const sessionTimeout = 15 * 60 * 1000; // 15 minutes
-
-		// Check if we need to re-login
-		if (
-			this.lastLoginCredentials &&
-			this.lastLoginCredentials.username === credentials.username &&
-			this.lastLoginCredentials.password === credentials.password &&
-			this.lastLoginDate &&
-			Date.now() - this.lastLoginDate < sessionTimeout
-		) {
-			return;
-		}
-
-		this.fetch = makeFetchCookie(fetch);
-
-		const formData = new FormData();
-		formData.append("username", credentials.username);
-		formData.append("password", credentials.password);
-
-		await this.fetch("https://newinsane.info/login.php", {
-			method: "POST",
-			body: formData,
-			signal: AbortSignal.timeout(
-				getRuntimeConfig().config.search.requestTimeout,
-			),
-		});
-
-		this.lastLoginCredentials = credentials;
-		this.lastLoginDate = Date.now();
 	}
 
 	private getCredentials() {

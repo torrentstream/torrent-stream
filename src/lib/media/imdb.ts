@@ -1,4 +1,4 @@
-import { getRuntimeConfig } from "./config";
+import { getRuntimeConfig } from "../config/runtime";
 
 export function isImdbId(str: string) {
 	return /ev\d{7}\/\d{4}(-\d)?|(ch|co|ev|nm|tt)\d{7}/.test(str);
