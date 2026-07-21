@@ -120,7 +120,7 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 
 	return (
 		<form
-			className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-[3.75rem]"
+			className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-15"
 			onSubmit={(event) => {
 				event.preventDefault();
 				void submit();

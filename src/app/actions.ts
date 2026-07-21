@@ -5,9 +5,9 @@ import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config/schema";
 import { getReadableSize } from "@/lib/media/file";
 import { getProviderName, providers } from "@/lib/search/provider-registry";
 import { getTorrentClient } from "@/lib/torrent/clients";
+import { applyRuntimeTorrentConfig } from "@/lib/torrent/configuration";
 import { TorrentInfo } from "@/lib/torrent/info";
 import {
-	applyRuntimeTorrentConfig,
 	destroyTorrent,
 	getSeedStats,
 	getStreams,
