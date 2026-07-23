@@ -21,6 +21,7 @@ export interface SeedState {
 interface SeedRecord {
 	uploaded: number;
 	downloaded: number;
+	addedAt: number;
 	files: string[];
 	provider?: string;
 }
@@ -42,6 +43,7 @@ export function metainfoFile(infoHash: string) {
 function loadSeedRecords(): Record<string, SeedRecord> {
 	if (!existsSync(stateFile)) return {};
 	try {
+		const loadedAt = Date.now();
 		const parsed = JSON.parse(readFileSync(stateFile, "utf8"));
 		if (
 			typeof parsed !== "object" ||
@@ -56,12 +58,21 @@ function loadSeedRecords(): Record<string, SeedRecord> {
 					value && typeof value === "object"
 						? (value as Record<string, unknown>)
 						: {};
+				const parsedAddedAt =
+					typeof record.addedAt === "string"
+						? Date.parse(record.addedAt)
+						: record.addedAt;
 				return [
 					infoHash,
 					{
 						uploaded: typeof record.uploaded === "number" ? record.uploaded : 0,
 						downloaded:
 							typeof record.downloaded === "number" ? record.downloaded : 0,
+						addedAt:
+							typeof parsedAddedAt === "number" &&
+							Number.isFinite(parsedAddedAt)
+								? parsedAddedAt
+								: loadedAt,
 						files: Array.isArray(record.files)
 							? record.files.filter(
 									(file): file is string => typeof file === "string",
@@ -146,6 +157,7 @@ export function initSeedState(
 		record = {
 			uploaded: 0,
 			downloaded: 0,
+			addedAt: Date.now(),
 			files: [],
 			provider,
 		};

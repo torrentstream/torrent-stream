@@ -26,6 +26,9 @@ declare global {
 	var seedRequirementInterval: NodeJS.Timeout | undefined;
 }
 
+const seedRequirementCheckInterval = 60 * 60 * 1000;
+const seedRequirementGracePeriod = 8 * 60 * 60 * 1000;
+
 function normalizeTorrentName(name: string) {
 	return name.trim().toLocaleLowerCase();
 }
@@ -44,11 +47,15 @@ async function checkProviderSeedRequirements(provider: TorrentSearchProvider) {
 	}
 	if (!shouldCheckSeedRequirements(provider)) return;
 
+	const now = Date.now();
 	const torrents = getTorrentClient().torrents.filter((torrent) => {
 		const data = getTorrentData(torrent);
+		const seedRecord = seedRecords[torrent.infoHash];
 		return (
 			data?.provider === provider.id &&
 			Boolean(data.seed) &&
+			seedRecord !== undefined &&
+			now - seedRecord.addedAt >= seedRequirementGracePeriod &&
 			data.streams.size === 0 &&
 			!requiredNames.has(normalizeTorrentName(torrent.name))
 		);
@@ -88,12 +95,9 @@ function stopSeedRequirementInterval() {
 function startSeedRequirementInterval() {
 	stopSeedRequirementInterval();
 	if (getRuntimeConfig().config.storage.mode !== "file") return;
-	global.seedRequirementInterval = setInterval(
-		() => {
-			void checkSeedRequirements();
-		},
-		60 * 60 * 1000,
-	);
+	global.seedRequirementInterval = setInterval(() => {
+		void checkSeedRequirements();
+	}, seedRequirementCheckInterval);
 }
 
 export async function resumeSeedingTorrents() {
