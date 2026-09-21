@@ -5,6 +5,7 @@ export const providerIds = [
 	"ncore",
 	"insane",
 	"torrentio",
+	"torznab",
 ] as const satisfies readonly ProviderId[];
 
 export const searchSortCriteria = [
@@ -22,8 +23,17 @@ export interface TorrentioProviderConfig {
 	sources: string[];
 }
 
+export interface TorznabProviderConfig {
+	enabled: boolean;
+	feeds: {
+		url: string;
+		apiKey: string;
+	}[];
+}
+
 export type RuntimeProviders = {
 	torrentio: TorrentioProviderConfig;
+	torznab: TorznabProviderConfig;
 	ncore: {
 		enabled: boolean;
 		username: string;
@@ -105,6 +115,10 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 				enabled: true,
 				allTrackers: true,
 				sources: [],
+			},
+			torznab: {
+				enabled: false,
+				feeds: [],
 			},
 		},
 	};
@@ -228,6 +242,16 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 
 	const ncore = object(providers.ncore);
 	const insane = object(providers.insane);
+	const torznab = object(providers.torznab);
+	const torznabFeeds = Array.isArray(torznab.feeds)
+		? torznab.feeds.map((feed) => {
+				const parsed = object(feed);
+				return {
+					url: string(parsed.url, ""),
+					apiKey: string(parsed.apiKey, ""),
+				};
+			})
+		: [...defaults.providers.torznab.feeds];
 	return {
 		storage: {
 			mode:
@@ -292,6 +316,10 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 				username: string(insane.username, defaults.providers.insane.username),
 				password: string(insane.password, defaults.providers.insane.password),
 				seeding: boolean(insane.seeding, defaults.providers.insane.seeding),
+			},
+			torznab: {
+				enabled: boolean(torznab.enabled, defaults.providers.torznab.enabled),
+				feeds: torznabFeeds,
 			},
 			torrentio: parsedTorrentio,
 		},

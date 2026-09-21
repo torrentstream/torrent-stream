@@ -1,12 +1,21 @@
 "use client";
 
-import { Eye, EyeOff, GripVertical, RotateCcw, Save } from "lucide-react";
+import {
+	Eye,
+	EyeOff,
+	GripVertical,
+	Plus,
+	RotateCcw,
+	Save,
+	Trash2,
+} from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { type SaveConfigurationResult, saveConfiguration } from "@/app/actions";
 import type {
 	ProviderId,
 	RuntimeConfig,
 	SearchSortCriterion,
+	TorznabProviderConfig,
 } from "@/lib/config/schema";
 import { formatStrings, TorrentFormat } from "@/lib/media/format";
 import { supportedLanguages } from "@/lib/media/language";
@@ -610,6 +619,7 @@ function ProvidersCard({
 }) {
 	const fileMode = config.storage.mode === "file";
 	const torrentio = config.providers.torrentio;
+	const torznab = config.providers.torznab;
 	const optionsById = new Map(
 		providerOptions.map((provider) => [provider.id, provider]),
 	);
@@ -627,7 +637,7 @@ function ProvidersCard({
 	return (
 		<Section
 			title="Providers"
-			description="Enable search providers and choose which sources Torrentio may use."
+			description="Enable search providers and configure their sources and credentials."
 		>
 			{config.search.providerOrder.map((provider) => {
 				if (provider === "ncore" || provider === "insane") {
@@ -679,9 +689,122 @@ function ProvidersCard({
 						</ProviderBox>
 					);
 				}
+
+				if (provider === "torznab") {
+					return (
+						<TorznabProvider
+							key={provider}
+							name={optionsById.get(provider)?.name ?? provider}
+							config={torznab}
+							sort={sortProps(provider)}
+							onChange={(providerConfig) =>
+								update((next) => {
+									next.providers.torznab = providerConfig;
+								})
+							}
+						/>
+					);
+				}
 				return null;
 			})}
 		</Section>
+	);
+}
+
+function TorznabProvider({
+	name,
+	config,
+	sort,
+	onChange,
+}: {
+	name: string;
+	config: TorznabProviderConfig;
+	sort: ProviderSortProps;
+	onChange: (config: TorznabProviderConfig) => void;
+}) {
+	const change = (recipe: (next: TorznabProviderConfig) => void) => {
+		const next = structuredClone(config);
+		recipe(next);
+		onChange(next);
+	};
+
+	return (
+		<ProviderBox sort={sort}>
+			<Toggle
+				label={name}
+				description="Search one or more Jackett, Prowlarr, Harbrr, or other Torznab-compatible feeds."
+				checked={config.enabled}
+				onChange={(enabled) =>
+					change((next) => {
+						next.enabled = enabled;
+					})
+				}
+			/>
+			{config.enabled && (
+				<div className="mt-4 flex flex-col gap-4 border-t pt-4">
+					{config.feeds.map((feed, index) => (
+						<div
+							// biome-ignore lint/suspicious/noArrayIndexKey: Feed rows have no persisted ID and only support append/remove.
+							key={index}
+							className="grid gap-4 rounded-lg border p-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]"
+						>
+							<div className="flex flex-col gap-2">
+								<Label htmlFor={`torznab-url-${index}`}>Endpoint URL</Label>
+								<Input
+									id={`torznab-url-${index}`}
+									type="url"
+									placeholder="http://localhost:9117/api/v2.0/indexers/all/results/torznab/api"
+									value={feed.url}
+									onChange={(event) =>
+										change((next) => {
+											next.feeds[index].url = event.target.value;
+										})
+									}
+								/>
+							</div>
+							<PasswordField
+								id={`torznab-api-key-${index}`}
+								label="API key"
+								autoComplete="off"
+								value={feed.apiKey}
+								onChange={(apiKey) =>
+									change((next) => {
+										next.feeds[index].apiKey = apiKey;
+									})
+								}
+							/>
+							<Button
+								type="button"
+								variant="destructive"
+								size="icon"
+								className="self-end"
+								aria-label={`Remove Torznab feed ${index + 1}`}
+								onClick={() =>
+									change((next) => {
+										next.feeds.splice(index, 1);
+									})
+								}
+							>
+								<Trash2 />
+							</Button>
+						</div>
+					))}
+					<Button
+						type="button"
+						variant="outline"
+						className="self-start"
+						onClick={() =>
+							change((next) => {
+								next.feeds.push({ url: "", apiKey: "" });
+							})
+						}
+					>
+						<Plus />
+						Add feed
+					</Button>
+				</div>
+			)}
+		</ProviderBox>
 	);
 }
 
@@ -1053,23 +1176,27 @@ function SpeedField({
 
 function PasswordField({
 	id,
+	label = "Password",
+	autoComplete = "current-password",
 	value,
 	onChange,
 }: {
 	id: string;
+	label?: string;
+	autoComplete?: string;
 	value: string;
 	onChange: (value: string) => void;
 }) {
 	const [visible, setVisible] = useState(false);
 	return (
 		<div className="flex flex-col gap-2">
-			<Label htmlFor={id}>Password</Label>
+			<Label htmlFor={id}>{label}</Label>
 			<div className="relative">
 				<Input
 					id={id}
 					type={visible ? "text" : "password"}
 					value={value}
-					autoComplete="current-password"
+					autoComplete={autoComplete}
 					onChange={(event) => onChange(event.target.value)}
 					className="pr-10"
 				/>

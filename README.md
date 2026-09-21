@@ -76,8 +76,8 @@ If you already have your own domain and a reverse proxy setup, or any other way 
 ## Configuration
 
 Open `/config` in the web interface to configure storage behavior, limits,
-timeouts, search filters, providers, credentials, Torrentio sources, and
-seeding for private providers. The settings are saved to
+timeouts, search filters, providers, credentials, Torrentio sources, Torznab
+feeds, and seeding for private providers. The settings are saved to
 `$CONFIG_PATH/config.json` and applied without restarting the application
 where possible. Changing storage mode requires confirmation because it
 rebuilds the torrent clients and interrupts active playback.
