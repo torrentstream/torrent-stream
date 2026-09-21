@@ -1,20 +1,19 @@
-import type { Instance } from "webtorrent";
 import WebTorrent from "webtorrent";
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 
 declare global {
-	var torrentClientInstance: Instance | undefined;
-	var infoClientInstance: Instance | undefined;
+	var torrentClientInstance: WebTorrent | undefined;
+	var infoClientInstance: WebTorrent | undefined;
 }
 
-function isDestroyed(client: Instance | undefined) {
+function isDestroyed(client: WebTorrent | undefined) {
 	return Boolean(
-		(client as (Instance & { destroyed?: boolean }) | undefined)?.destroyed,
+		(client as (WebTorrent & { destroyed?: boolean }) | undefined)?.destroyed,
 	);
 }
 
-function attachMainClientErrorHandler(client: Instance) {
+function attachMainClientErrorHandler(client: WebTorrent) {
 	client.on("error", (error) => {
 		if (
 			error instanceof Error &&
@@ -56,7 +55,7 @@ export function getInfoClient() {
 	return global.infoClientInstance;
 }
 
-function destroyClient(client: Instance) {
+function destroyClient(client: WebTorrent) {
 	return new Promise<void>((resolve) => {
 		if (isDestroyed(client)) return resolve();
 		client.destroy(() => resolve());

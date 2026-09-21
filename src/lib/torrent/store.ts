@@ -84,8 +84,11 @@ export class TorrentStreamChunkStore implements ChunkStore {
 	}
 
 	refreshCapacity(streamCount: number) {
-		const chunksPerStream = Math.floor(
-			getRuntimeConfig().config.storage.streamMemoryLimit / this.chunkLength,
+		const chunksPerStream = Math.max(
+			1,
+			Math.floor(
+				getRuntimeConfig().config.storage.streamMemoryLimit / this.chunkLength,
+			),
 		);
 
 		const capacity = (streamCount || 1) * chunksPerStream;

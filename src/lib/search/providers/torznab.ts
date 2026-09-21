@@ -156,9 +156,9 @@ export class TorznabProvider extends TorrentSearchProvider {
 			return this.localName(element.tagName) === "channel";
 		});
 		const source = this.sourceProvider(
-			this.childText($, channel, "title"),
-			this.childText($, channel, "description"),
-			this.childText($, channel, "generator"),
+			this.childText(channel, "title"),
+			this.childText(channel, "description"),
+			this.childText(channel, "generator"),
 		);
 		const baseUrl = new URL(requestUrl);
 		baseUrl.search = "";
@@ -179,8 +179,8 @@ export class TorznabProvider extends TorrentSearchProvider {
 			const candidates = [
 				attrs.get("magneturl"),
 				enclosure.attr("url"),
-				this.childText($, item, "link"),
-				this.childText($, item, "guid"),
+				this.childText(item, "link"),
+				this.childText(item, "guid"),
 			];
 			let magnet = this.firstMagnet(...candidates);
 			const infoHash =
@@ -193,14 +193,14 @@ export class TorznabProvider extends TorrentSearchProvider {
 			if (!magnet && !torrent) return;
 
 			const tracker = this.firstNonEmpty(
-				this.childText($, item, "jackettindexer"),
-				this.childText($, item, "prowlarrindexer"),
+				this.childText(item, "jackettindexer"),
+				this.childText(item, "prowlarrindexer"),
 				attrs.get("jackettindexer"),
 				attrs.get("prowlarrindexer"),
 				attrs.get("indexer"),
 				source,
 			);
-			const name = this.childText($, item, "title");
+			const name = this.childText(item, "title");
 			if (!name) return;
 
 			releases.push({
@@ -221,11 +221,7 @@ export class TorznabProvider extends TorrentSearchProvider {
 		return releases;
 	}
 
-	private childText(
-		$: cheerio.CheerioAPI,
-		parent: ReturnType<cheerio.CheerioAPI>,
-		name: string,
-	) {
+	private childText(parent: ReturnType<cheerio.CheerioAPI>, name: string) {
 		return (
 			parent
 				.children()

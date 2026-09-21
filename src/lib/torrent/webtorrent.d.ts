@@ -1,10 +1,6 @@
 import "webtorrent";
 
 declare module "webtorrent" {
-	export interface TorrentOptions {
-		deselect?: boolean;
-	}
-
 	export type FileIterator = AsyncIterator<Uint8Array> & {
 		_startPiece: number;
 		_endPiece: number;
