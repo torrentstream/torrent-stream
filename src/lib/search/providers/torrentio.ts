@@ -9,6 +9,7 @@ const torrentioTrackers = [
 	{ id: "eztv", name: "EZTV" },
 	{ id: "rarbg", name: "RARBG" },
 	{ id: "1337x", name: "1337x" },
+	{ id: "ext", name: "EXT" },
 	{ id: "thepiratebay", name: "The Pirate Bay" },
 	{ id: "kickasstorrents", name: "KickassTorrents" },
 	{ id: "torrentgalaxy", name: "TorrentGalaxy" },
@@ -17,6 +18,7 @@ const torrentioTrackers = [
 	{ id: "nyaasi", name: "Nyaa.si" },
 	{ id: "tokyotosho", name: "Tokyo Toshokan" },
 	{ id: "anidex", name: "AniDex" },
+	{ id: "nekobt", name: "nekoBT" },
 	{ id: "rutor", name: "Rutor" },
 	{ id: "rutracker", name: "RuTracker" },
 	{ id: "comando", name: "Comando" },
@@ -52,13 +54,13 @@ export class TorrentioProvider extends TorrentSearchProvider {
 			case TorrentCategory.Movie:
 				return this.searchTorrents(trackers, "movie", query);
 			case TorrentCategory.Series:
-				return this.searchTorrents(trackers, "tv", query, season, episode);
+				return this.searchTorrents(trackers, "series", query, season, episode);
 		}
 	}
 
 	async searchTorrents(
 		providers: string[],
-		category: "movie" | "tv",
+		category: "movie" | "series",
 		imdb: string,
 		season?: number,
 		episode?: number,
@@ -78,17 +80,27 @@ export class TorrentioProvider extends TorrentSearchProvider {
 			].join("/");
 
 			const response = await fetch(url, {
+				headers: { Accept: "application/json" },
 				signal: AbortSignal.timeout(
 					getRuntimeConfig().config.search.requestTimeout,
 				),
 			});
+			if (!response.ok) {
+				throw new Error(
+					`Torrentio returned ${response.status} ${response.statusText}`,
+				);
+			}
+
 			const responseJson = (await response.json()) as {
-				streams: StremioStream[];
+				streams?: StremioStream[];
 			};
 
-			for (const stream of responseJson.streams) {
+			for (const stream of responseJson.streams || []) {
+				const infoHash = stream.infoHash?.trim().toLowerCase();
+				if (!infoHash || !this.isValidInfoHash(infoHash)) continue;
+
 				const name =
-					stream.title?.split("\n")[0].replace("⭐", "") ||
+					stream.title?.split("\n")[0].replace("⭐", "").trim() ||
 					stream.behaviorHints?.filename ||
 					stream.name;
 
@@ -107,11 +119,11 @@ export class TorrentioProvider extends TorrentSearchProvider {
 				const seeds =
 					Number(stream.title?.split("👤 ")[1]?.split(" 💾")[0]) || undefined;
 
-				const trackers = (stream.sources || [])
+				const trackers = this.getTrackers(stream.sources)
 					.map((tr) => `&tr=${encodeURIComponent(tr)}`)
 					.join("");
 
-				const magnet = `magnet:?xt=urn:btih:${stream.infoHash}${trackers}`;
+				const magnet = `magnet:?xt=urn:btih:${infoHash}${trackers}`;
 
 				torrents.push(
 					new TorrentSearchResult({
@@ -168,5 +180,25 @@ export class TorrentioProvider extends TorrentSearchProvider {
 		if (!sizeNum || !units[unit]) return 0;
 
 		return Math.ceil(sizeNum * units[unit]);
+	}
+
+	private isValidInfoHash(infoHash: string) {
+		return /^[a-f0-9]{40}$/i.test(infoHash) || /^[a-z2-7]{32}$/i.test(infoHash);
+	}
+
+	private getTrackers(sources: string[] | undefined) {
+		const trackers = new Set<string>();
+
+		for (const source of sources || []) {
+			const trimmed = source.trim();
+			const tracker = trimmed.startsWith("tracker:")
+				? trimmed.slice("tracker:".length)
+				: trimmed;
+
+			if (!/^(?:https?|udp|wss):\/\//i.test(tracker)) continue;
+			trackers.add(tracker);
+		}
+
+		return [...trackers];
 	}
 }
