@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { tryParseEnum } from "@/lib/enum";
 import { isImdbId } from "@/lib/media/imdb";
+import { searchOpenSubtitles } from "@/lib/media/opensubtitles";
 import { TorrentCategory } from "@/lib/search/provider";
 import { getStremioStreams } from "@/lib/search/stremio";
 
@@ -48,13 +49,22 @@ export async function GET(
 
 	const endpoint = `${protocol}://${host}/api/file`;
 
-	const streams = await getStremioStreams(
-		endpoint,
-		category,
-		imdbId,
-		season,
-		episode,
-	);
+	const [streams, subtitles] = await Promise.all([
+		getStremioStreams(endpoint, category, imdbId, season, episode),
+		searchOpenSubtitles(imdbId, season, episode),
+	]);
 
-	return NextResponse.json({ streams });
+	return NextResponse.json({
+		streams: streams.map((stream) => ({
+			...stream,
+			subtitles: [
+				...(stream.subtitles || []),
+				...subtitles.subtitles.map((subtitle) => ({
+					...subtitle,
+					url: new URL(subtitle.url, `${protocol}://${host}`).href,
+				})),
+			],
+		})),
+		subtitleError: subtitles.error,
+	});
 }

@@ -114,6 +114,41 @@
 }
 
 @layer base {
+	:where(
+			button,
+			a[href],
+			summary,
+			select,
+			input[type="button"],
+			input[type="submit"],
+			input[type="reset"],
+			input[type="checkbox"],
+			input[type="radio"],
+			input[type="range"],
+			input[type="file"],
+			label[for],
+			label:has(input),
+			[role="button"],
+			[role="link"],
+			[role="tab"],
+			[role="checkbox"],
+			[role="radio"],
+			[role="switch"],
+			[role="menuitem"],
+			[role="option"]
+		):not(:disabled, [aria-disabled="true"], [data-disabled]) {
+		cursor: pointer;
+	}
+
+	:where(button, select, input, [role]):is(
+			:disabled,
+			[aria-disabled="true"],
+			[data-disabled]
+		),
+	label:has(input:disabled) {
+		cursor: not-allowed;
+	}
+
 	* {
 		@apply border-border outline-ring/50;
 	}

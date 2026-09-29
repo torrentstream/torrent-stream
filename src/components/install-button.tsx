@@ -5,7 +5,7 @@ import { InstallDialog } from "./install-dialog";
 import { StremioIcon } from "./stremio-icon";
 import { Button } from "./ui/button";
 
-export function InstallButton() {
+export function InstallButton({ fullWidth = false }: { fullWidth?: boolean }) {
 	const [protocol, setProtocol] = useState("");
 	const [host, setHost] = useState("");
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -18,12 +18,18 @@ export function InstallButton() {
 	return (
 		<>
 			<Button
-				className="bg-[#5a4cad] hover:bg-[#695dac] text-white rounded-full"
+				className={`bg-[#5a4cad] hover:bg-[#695dac] text-white rounded-full ${fullWidth ? "w-full min-h-11" : ""}`}
 				onClick={() => setDialogOpen(true)}
 			>
 				<StremioIcon />
-				<span className="hidden md:inline">Install Stremio Addon</span>
-				<span className="md:hidden">Install</span>
+				{fullWidth ? (
+					"Install Stremio Addon"
+				) : (
+					<>
+						<span className="hidden md:inline">Install Stremio Addon</span>
+						<span className="md:hidden">Install</span>
+					</>
+				)}
 			</Button>
 
 			<InstallDialog

@@ -21,13 +21,7 @@ import { formatStrings, TorrentFormat } from "@/lib/media/format";
 import { supportedLanguages } from "@/lib/media/language";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "./ui/card";
+import { Card, CardContent } from "./ui/card";
 import {
 	Dialog,
 	DialogClose,
@@ -129,7 +123,7 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 
 	return (
 		<form
-			className="mx-auto flex w-full max-w-5xl flex-col gap-6 pb-15"
+			className="mx-auto flex w-full flex-col gap-6 pb-16"
 			onSubmit={(event) => {
 				event.preventDefault();
 				void submit();
@@ -152,9 +146,10 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 				providerOptions={saved.providerOptions}
 				update={update}
 			/>
+			<ApiKeysCard config={draft} update={update} />
 
-			<div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 p-3 backdrop-blur">
-				<div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+			<div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 py-3 backdrop-blur">
+				<div className="container mx-auto flex items-center justify-between gap-3 px-4 sm:px-6">
 					<div className="min-w-0 text-sm">
 						{error ? (
 							<p role="alert" className="truncate text-destructive">
@@ -236,10 +231,7 @@ function StorageCard({
 }) {
 	const storagePathId = useId();
 	return (
-		<Section
-			title="Storage"
-			description="Choose whether streamed pieces live in memory or on disk."
-		>
+		<Section title="Storage">
 			<div className="grid grid-cols-2 gap-2">
 				{(["memory", "file"] as const).map((mode) => (
 					<button
@@ -334,10 +326,7 @@ function TorrentCard({
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
 	return (
-		<Section
-			title="Torrent client"
-			description="Transfer limits apply live. Use 0 to block traffic or Unlimited to remove throttling."
-		>
+		<Section title="Torrent client">
 			<div className="grid gap-4 sm:grid-cols-2">
 				<SpeedField
 					label="Download limit"
@@ -444,10 +433,7 @@ function SearchCard({
 	];
 
 	return (
-		<Section
-			title="Search filters"
-			description="Results containing any excluded detected format are filtered out."
-		>
+		<Section title="Search filters">
 			<div>
 				<div className="mb-2 flex items-center justify-between">
 					<Label>Formats</Label>
@@ -635,10 +621,7 @@ function ProvidersCard({
 	});
 
 	return (
-		<Section
-			title="Providers"
-			description="Enable search providers and configure their sources and credentials."
-		>
+		<Section title="Providers">
 			{config.search.providerOrder.map((provider) => {
 				if (provider === "ncore" || provider === "insane") {
 					return (
@@ -929,23 +912,109 @@ function PrivateProvider({
 	);
 }
 
+function ApiKeysCard({
+	config,
+	update,
+}: {
+	config: RuntimeConfig;
+	update: (recipe: (next: RuntimeConfig) => void) => void;
+}) {
+	return (
+		<Section title="API keys">
+			<div className="space-y-2">
+				<PasswordField
+					id="tmdb-api-key"
+					label="TMDB API key"
+					autoComplete="off"
+					value={config.tmdbApiKey || ""}
+					onChange={(value) =>
+						update((next) => {
+							next.tmdbApiKey = value;
+						})
+					}
+				/>
+				<p className="text-xs leading-relaxed text-muted-foreground">
+					Used for movie and TV metadata. Leave empty to use the default key.
+				</p>
+			</div>
+			<div className="border-t" />
+			<div className="space-y-2">
+				<PasswordField
+					id="opensubtitles-api-key"
+					label="OpenSubtitles API key"
+					autoComplete="off"
+					value={config.opensubtitles.apiKey}
+					onChange={(value) =>
+						update((next) => {
+							next.opensubtitles.apiKey = value;
+						})
+					}
+				/>
+				<p className="text-xs leading-relaxed text-muted-foreground">
+					Get an API key from your{" "}
+					<a
+						className="underline underline-offset-4"
+						href="https://www.opensubtitles.com/consumers"
+						target="_blank"
+						rel="noreferrer"
+					>
+						OpenSubtitles account
+					</a>
+					. Leave it empty to disable. Subtitles use your search languages and
+					download only when selected.
+				</p>
+			</div>
+			<div className="space-y-2">
+				<div className="grid gap-6 sm:grid-cols-2">
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="opensubtitles-username">Username (optional)</Label>
+						<Input
+							id="opensubtitles-username"
+							autoComplete="username"
+							value={config.opensubtitles.username}
+							onChange={(event) =>
+								update((next) => {
+									next.opensubtitles.username = event.target.value;
+								})
+							}
+						/>
+					</div>
+					<PasswordField
+						id="opensubtitles-password"
+						label="Password (optional)"
+						value={config.opensubtitles.password}
+						onChange={(value) =>
+							update((next) => {
+								next.opensubtitles.password = value;
+							})
+						}
+					/>
+				</div>
+				<p className="text-xs leading-relaxed text-muted-foreground">
+					Sign in to use your account’s download allowance. Without a login,
+					OpenSubtitles applies its anonymous download limit.
+				</p>
+			</div>
+		</Section>
+	);
+}
+
 function Section({
 	title,
-	description,
 	children,
 }: {
 	title: string;
-	description: string;
 	children: React.ReactNode;
 }) {
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>{title}</CardTitle>
-				<CardDescription>{description}</CardDescription>
-			</CardHeader>
-			<CardContent className="flex flex-col gap-6">{children}</CardContent>
-		</Card>
+		<section className="space-y-6">
+			<h2 className="flex min-h-10 items-center text-xl font-semibold">
+				{title}
+			</h2>
+			<Card>
+				<CardContent className="flex flex-col gap-6">{children}</CardContent>
+			</Card>
+		</section>
 	);
 }
 
@@ -1250,7 +1319,7 @@ function Chip({
 			onDrop={onDrop}
 			onDragEnd={onDragEnd}
 			className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed ${
-				draggable ? "cursor-grab active:cursor-grabbing " : ""
+				draggable ? "cursor-pointer active:cursor-grabbing " : ""
 			}${
 				selected
 					? "border-primary bg-primary text-primary-foreground"

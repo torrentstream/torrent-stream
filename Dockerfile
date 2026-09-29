@@ -30,6 +30,7 @@ COPY --from=bun-image /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY patches/ ./patches/
 
 # Install dependencies using Bun
 RUN bun install --frozen-lockfile
@@ -53,6 +54,7 @@ COPY --from=bun-image /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 COPY package.json bun.lock ./
+COPY patches/ ./patches/
 
 # Install runtime dependencies only (no devDependencies)
 RUN bun install --frozen-lockfile --production

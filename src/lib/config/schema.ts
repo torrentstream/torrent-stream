@@ -72,6 +72,8 @@ export interface RuntimeConfig {
 		sortPriority: SearchSortCriterion[];
 		providerOrder: ProviderId[];
 	};
+	tmdbApiKey: string;
+	opensubtitles: { apiKey: string; username: string; password: string };
 	providers: RuntimeProviders;
 }
 
@@ -98,6 +100,8 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 			sortPriority: [...searchSortCriteria],
 			providerOrder: [...providerIds],
 		},
+		tmdbApiKey: "",
+		opensubtitles: { apiKey: "", username: "", password: "" },
 		providers: {
 			ncore: {
 				enabled: false,
@@ -187,6 +191,7 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 	const storage = object(root.storage);
 	const torrent = object(root.torrent);
 	const search = object(root.search);
+	const opensubtitles = object(root.opensubtitles);
 	const providers = object(root.providers);
 
 	const formats = search.formats;
@@ -303,6 +308,12 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 			languages: parsedLanguages,
 			sortPriority,
 			providerOrder,
+		},
+		tmdbApiKey: string(root.tmdbApiKey, "").trim(),
+		opensubtitles: {
+			apiKey: string(opensubtitles.apiKey, "").trim(),
+			username: string(opensubtitles.username, "").trim(),
+			password: string(opensubtitles.password, ""),
 		},
 		providers: {
 			ncore: {

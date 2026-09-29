@@ -31,6 +31,7 @@ export async function GET(
 	const torrent = await getOrAddTorrent(
 		torrentRequest.uri,
 		torrentRequest.provider,
+		request.nextUrl.searchParams.get("prepare") === "1" ? 300_000 : undefined,
 	);
 	if (!torrent) {
 		return NextResponse.json(
@@ -45,6 +46,19 @@ export async function GET(
 			{ error: "File not found in torrent." },
 			{ status: 404 },
 		);
+	}
+
+	// The player probes the full file size before issuing ranged reads.
+	// A HEAD response must not inherit the in-memory range cap or start downloading.
+	if (request.method === "HEAD") {
+		return new NextResponse(null, {
+			headers: {
+				"Accept-Ranges": "bytes",
+				"Content-Length": String(file.length),
+				"Content-Type": getStreamingMimeType(file.name),
+				"Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+			},
+		});
 	}
 
 	const rangeHeader = request.headers.get("range");
@@ -91,10 +105,13 @@ export async function GET(
 		const startPiece = Math.floor(startByte / torrent.pieceLength);
 		const nextPieceStartByte = (startPiece + 1) * torrent.pieceLength;
 		const bytesUntilNextPiece = nextPieceStartByte - startByte;
-		const buffer = Math.floor(
-			getRuntimeConfig().config.storage.streamMemoryLimit /
-				torrent.pieceLength /
-				2,
+		const buffer = Math.max(
+			1,
+			Math.floor(
+				getRuntimeConfig().config.storage.streamMemoryLimit /
+					torrent.pieceLength /
+					2,
+			),
 		);
 		const maxLength = bytesUntilNextPiece + (buffer - 1) * torrent.pieceLength;
 
@@ -107,7 +124,14 @@ export async function GET(
 		return new NextResponse(null, { status: 499 });
 	}
 
-	const stream = getReadableStream(streamId, torrent, file, start, end);
+	const stream = getReadableStream(
+		streamId,
+		torrent,
+		file,
+		start,
+		end,
+		request.signal,
+	);
 
 	const headers = new Headers({
 		Connection: "keep-alive",
@@ -121,3 +145,5 @@ export async function GET(
 
 	return new NextResponse(stream, { status: 206, headers });
 }
+
+export const HEAD = GET;

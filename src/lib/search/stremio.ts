@@ -23,6 +23,9 @@ export type StremioStream = {
 		id: string;
 		url: string;
 		lang: string;
+		label?: string;
+		hearingImpaired?: boolean;
+		format?: "srt" | "vtt";
 	}[];
 	behaviorHints?: {
 		bingeGroup?: string;

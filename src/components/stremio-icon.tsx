@@ -1,14 +1,16 @@
+import { useId } from "react";
+
 export function StremioIcon() {
+	const maskId = useId();
 	return (
 		<svg
 			xmlns="http://www.w3.org/2000/svg"
 			viewBox="0 0 124.926 124.926"
-			width={124.926}
-			height={124.926}
+			className="size-5 shrink-0"
+			aria-hidden="true"
 		>
-			<title>Stremio Icon</title>
 			<defs>
-				<mask id="playButtonMask">
+				<mask id={maskId}>
 					<rect
 						width={88.336}
 						height={88.336}
@@ -22,7 +24,7 @@ export function StremioIcon() {
 					/>
 				</mask>
 			</defs>
-			<g transform="translate(.001)" mask="url(#playButtonMask)">
+			<g transform="translate(.001)" mask={`url(#${maskId})`}>
 				<rect
 					width={88.336}
 					height={88.336}

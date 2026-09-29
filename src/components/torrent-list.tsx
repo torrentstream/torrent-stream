@@ -14,6 +14,7 @@ import {
 	Trash2,
 	Upload,
 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { Area, AreaChart } from "recharts";
 import useSWR from "swr";
@@ -50,12 +51,26 @@ export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 
 	return (
 		<div ref={cardsParent} className="flex flex-col gap-6">
+			<div className="flex min-h-10 items-center gap-3">
+				<h1 className="text-xl font-semibold">Active torrents</h1>
+				<Badge variant="secondary">{data.torrents.length}</Badge>
+			</div>
 			{data.torrents.length === 0 && (
 				<div
 					key="no-torrents"
-					className="p-12 text-center text-muted-foreground"
+					className="rounded-xl border bg-card p-8 text-center"
 				>
-					No torrents are added currently.
+					<h2 className="font-medium">No active torrents</h2>
+					<p className="mt-2 text-sm text-muted-foreground">
+						Start watching some streams before you can monitor torrent progress
+						on this page.
+					</p>
+					<Link
+						href="/"
+						className="mt-4 inline-block text-sm underline underline-offset-4"
+					>
+						Browse titles
+					</Link>
 				</div>
 			)}
 			{data.torrents.map((torrent) => (

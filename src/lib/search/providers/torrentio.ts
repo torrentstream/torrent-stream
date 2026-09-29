@@ -199,6 +199,33 @@ export class TorrentioProvider extends TorrentSearchProvider {
 			trackers.add(tracker);
 		}
 
+		// Supplement Torrentio's sources with public trackers for peer discovery.
+		// Snapshot from:
+		// https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt
+		for (const tracker of [
+			"udp://tracker.opentrackr.org:1337/announce",
+			"udp://open.stealth.si:80/announce",
+			"udp://open.demonii.com:1337/announce",
+			"udp://tracker.skynetcloud.site:6969/announce",
+			"udp://tracker.qu.ax:6969/announce",
+			"udp://exodus.desync.com:6969/announce",
+			"udp://tracker.gmi.gd:6969/announce",
+			"udp://tracker.nyaa.vc:6969/announce",
+			"udp://explodie.org:6969/announce",
+			"udp://tracker.corpscorp.online:80/announce",
+			"udp://tracker.bittor.pw:1337/announce",
+			"udp://tracker-udp.gbitt.info:80/announce",
+			"udp://tracker.ducks.party:1984/announce",
+			"http://tracker2.dler.org:80/announce",
+			"http://tracker.dler.org:6969/announce",
+			"http://tracker.dler.com:6969/announce",
+			"http://tracker.renfei.net:8080/announce",
+			"udp://retracker01-msk-virt.corbina.net:80/announce",
+			"udp://tracker.peerfect.org:6969/announce",
+			"udp://tracker.opentrackr.com:6969/announce",
+		]) {
+			trackers.add(tracker);
+		}
 		return [...trackers];
 	}
 }

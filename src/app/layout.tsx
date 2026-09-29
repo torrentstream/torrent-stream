@@ -1,6 +1,6 @@
+import { NavigationBar } from "@/components/navigation-bar";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
-import { NavigationBar } from "@/components/navigation-bar";
 
 export default function RootLayout({
 	children,
@@ -14,9 +14,11 @@ export default function RootLayout({
 			</head>
 			<body>
 				<ThemeProvider attribute="class" defaultTheme="dark">
-					<div className="min-h-screen h-0 flex flex-col">
+					<div className="min-h-screen flex flex-col overflow-x-clip">
 						<NavigationBar />
-						<main className="mx-auto flex-1 container p-6">{children}</main>
+						<main className="mx-auto w-full flex-1 container p-4 sm:p-6">
+							{children}
+						</main>
 					</div>
 				</ThemeProvider>
 			</body>

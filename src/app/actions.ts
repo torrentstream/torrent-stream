@@ -2,11 +2,13 @@
 
 import { getRuntimeConfig, saveRuntimeConfig } from "@/lib/config/runtime";
 import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config/schema";
+import { decryptText } from "@/lib/encryption";
 import { getReadableSize } from "@/lib/media/file";
 import { getProviderName, providers } from "@/lib/search/provider-registry";
 import { getTorrentClient } from "@/lib/torrent/clients";
 import { applyRuntimeTorrentConfig } from "@/lib/torrent/configuration";
 import { TorrentInfo } from "@/lib/torrent/info";
+import { parseTorrentRequest } from "@/lib/torrent/request";
 import {
 	destroyTorrent,
 	getSeedStats,
@@ -98,6 +100,19 @@ export async function getTorrents(): Promise<TorrentStats> {
 		showDeleteFiles:
 			getRuntimeConfig().config.storage.mode === "file" &&
 			getRuntimeConfig().config.storage.keepFiles,
+	};
+}
+
+export async function getPlaybackStats(uri: string) {
+	const request = parseTorrentRequest(decryptText(uri));
+	const torrent = await getTorrentClient().get(request.uri);
+	if (!torrent || torrent.destroyed) return null;
+	return {
+		ready: torrent.ready,
+		peers: torrent.numPeers,
+		download: getReadableSize(torrent.downloadSpeed),
+		upload: getReadableSize(torrent.uploadSpeed),
+		downloaded: getReadableSize(torrent.downloaded),
 	};
 }
 

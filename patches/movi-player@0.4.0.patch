@@ -1,0 +1,120 @@
+diff --git a/dist/element.slim.js b/dist/element.slim.js
+index f3177dd2be92a598d6256130256529d543252133..18d495ca237532a3cdf7a338104c2d628a40e582 100644
+--- a/dist/element.slim.js
++++ b/dist/element.slim.js
+@@ -2550,15 +2550,9 @@ class HttpSource {
+               I5 > this.maxBufferedEnd && (this.maxBufferedEnd = I5);
+               const Q3 = this.size > 0 && this.bufferSize >= this.size, E3 = I5 - s2, t3 = Math.floor(Math.min(Y, 0.9 * this.bufferSize)), n3 = !Q3 && E3 >= t3, D3 = !Q3 && A6 >= 0.9 * h2.length;
+               if (n3 || D3) {
+-                const C5 = this.atomicGetBufferStart(), B4 = this.position - C5;
+-                if (B4 > 0.25 * this.bufferSize && this.size > 0 && I5 < this.size) {
+-                  const I6 = Math.floor(B4);
+-                  if (I6 > 0 && A6 > I6) {
+-                    h2.copyWithin(0, I6, A6), this.atomicSetBufferStart(C5 + I6), this.atomicSetWritePos(A6 - I6), s2 = C5 + I6, this.unlock(), g.debug(N, `Buffer compacted: reclaimed ${(I6 / 1024 / 1024).toFixed(1)}MB`);
+-                    break;
+-                  }
+-                }
+-                this.unlock(), g.debug(N, `Downloaded ${(E3 / 1024 / 1024).toFixed(1)}MB (${n3 ? "limit reached" : "buffer full"}), stopping stream`), this.atomicSetStreaming(false);
++                this.unlock();
++                await this.refillBufferWhenConsumed(M2);
++                s2 = this.atomicGetBufferStart();
+                 break;
+               }
+               if (this.unlock(), this.size > 0 && I5 >= this.size) {
+@@ -2822,6 +2816,30 @@ class HttpSource {
+     if (g.debug(N, `Read: waitForData returned ${E2}`), !E2) throw new Error(`Timeout at ${A2}`);
+     return this.consecutiveForceRestarts = 0, this.consecutiveOneOffFetches = 0, this.seekHinted = false, this.readFromBuffer(A2, I2);
+   }
++    async refillBufferWhenConsumed(reader) {
++        // Keep the remaining bytes available while waiting for room to refill.
++        // Never hold the buffer lock across an await, and stop on seek/close.
++        while (!this.closed && this.atomicIsStreaming() && this.reader === reader) {
++            const start = this.atomicGetBufferStart();
++            const written = this.atomicGetWritePos();
++            if (this.size > 0 && start + written >= this.size) {
++                this.atomicSetStreaming(false);
++                return;
++            }
++            const consumed = Math.floor(this.position - start);
++            if (consumed >= Math.max(1, written * 0.5) && consumed <= written && this.tryLock()) {
++                try {
++                    this.getBuffer().copyWithin(0, consumed, written);
++                    this.atomicSetBufferStart(start + consumed);
++                    this.atomicSetWritePos(written - consumed);
++                } finally {
++                    this.unlock();
++                }
++                return;
++            }
++            await new Promise(resolve => setTimeout(resolve, 100));
++        }
++    }
+   readFromBuffer(A2, I2) {
+     const g2 = this.getBuffer(), C2 = A2 - this.atomicGetBufferStart(), B2 = Math.min(I2, this.bufferEnd - A2), Q2 = this.size > 0 && A2 < this.size && A2 + I2 > this.size;
+     if ((B2 < I2 || C2 < 0) && !Q2) throw new Error(`Incomplete read at ${A2}: ${Math.max(0, B2)}/${I2} bytes buffered`);
+diff --git a/dist/source/HttpSource.js b/dist/source/HttpSource.js
+index c9655f4843a12f70fc918211d1111a5a7dec9dee..2d4ac346c0d999069d8ce61dea578b7ec15edae7 100644
+--- a/dist/source/HttpSource.js
++++ b/dist/source/HttpSource.js
+@@ -903,6 +903,30 @@ export class HttpSource {
+             this.atomicSetStreaming(false);
+         });
+     }
++    async refillBufferWhenConsumed(reader) {
++        // Keep the remaining bytes available while waiting for room to refill.
++        // Never hold the buffer lock across an await, and stop on seek/close.
++        while (!this.closed && this.atomicIsStreaming() && this.reader === reader) {
++            const start = this.atomicGetBufferStart();
++            const written = this.atomicGetWritePos();
++            if (this.size > 0 && start + written >= this.size) {
++                this.atomicSetStreaming(false);
++                return;
++            }
++            const consumed = Math.floor(this.position - start);
++            if (consumed >= Math.max(1, written * 0.5) && consumed <= written && this.tryLock()) {
++                try {
++                    this.getBuffer().copyWithin(0, consumed, written);
++                    this.atomicSetBufferStart(start + consumed);
++                    this.atomicSetWritePos(written - consumed);
++                } finally {
++                    this.unlock();
++                }
++                return;
++            }
++            await new Promise(resolve => setTimeout(resolve, 100));
++        }
++    }
+     async readStreamBackground(startOffset) {
+         let retryCount = 0;
+         // Track if we have committed the new buffer window to atomics
+@@ -1163,27 +1187,10 @@ export class HttpSource {
+                                 const limitReached = !fileCanFitInBuffer && totalDownloaded >= maxDownload;
+                                 const bufferAlmostFull = !fileCanFitInBuffer && newWritePos >= buffer.length * 0.9;
+                                 if (limitReached || bufferAlmostFull) {
+-                                    // Try buffer compaction for continuous forward streaming
+-                                    const bufStart = this.atomicGetBufferStart();
+-                                    const consumed = this.position - bufStart;
+-                                    if (consumed > this.bufferSize * 0.25 &&
+-                                        this.size > 0 && currentEnd < this.size) {
+-                                        const shift = Math.floor(consumed);
+-                                        if (shift > 0 && newWritePos > shift) {
+-                                            buffer.copyWithin(0, shift, newWritePos);
+-                                            this.atomicSetBufferStart(bufStart + shift);
+-                                            this.atomicSetWritePos(newWritePos - shift);
+-                                            streamBaseOffset = bufStart + shift;
+-                                            this.unlock();
+-                                            Logger.debug(TAG, `Buffer compacted: reclaimed ${(shift / 1024 / 1024).toFixed(1)}MB`);
+-                                            break; // Continue with new fetch in outer loop
+-                                        }
+-                                    }
+-                                    // Can't compact - stop stream
+                                     this.unlock();
+-                                    Logger.debug(TAG, `Downloaded ${(totalDownloaded / 1024 / 1024).toFixed(1)}MB (${limitReached ? 'limit reached' : 'buffer full'}), stopping stream`);
+-                                    this.atomicSetStreaming(false);
+-                                    break;
++                                    await this.refillBufferWhenConsumed(reader);
++                                    streamBaseOffset = this.atomicGetBufferStart();
++                                    break; // Fetch the next range without draining the buffer first.
+                                 }
+                                 this.unlock();
+                                 // Check EOF

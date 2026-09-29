@@ -260,9 +260,14 @@ export function InstallDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent showCloseButton={!loading}>
+			<DialogContent
+				showCloseButton={!loading}
+				className="max-h-[calc(100dvh-2rem)] min-w-0 overflow-y-auto p-5 sm:p-6 [&_input]:min-h-11 [&_input]:text-base [&_button]:min-h-11"
+			>
 				<DialogHeader>
-					<DialogTitle>Install Stremio Addon</DialogTitle>
+					<DialogTitle className="pr-10 leading-snug">
+						Install Stremio Addon
+					</DialogTitle>
 					<DialogDescription>
 						{https
 							? "Press the button below to install the addon to Stremio."
@@ -303,7 +308,7 @@ export function InstallDialog({
 								<FieldDescription className="text-xs">
 									Get your auth key from Stremio Web: open DevTools console and
 									run{" "}
-									<span className="font-mono bg-accent p-0.5 rounded">
+									<span className="block mt-2 break-all font-mono bg-accent p-2 rounded-md">
 										JSON.parse(localStorage.getItem("profile")).auth.key
 									</span>
 								</FieldDescription>
