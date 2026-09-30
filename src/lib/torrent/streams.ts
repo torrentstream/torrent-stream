@@ -19,6 +19,7 @@ import { TorrentStreamChunkStore } from "./store";
 
 export interface TorrentData {
 	provider?: string;
+	uris: Set<string>;
 	streams: Map<string, TorrentStream>;
 	speeds: LRU<number, { date: Date; upload: number; download: number }>;
 	removalTimeout?: NodeJS.Timeout;
@@ -166,8 +167,23 @@ export function getSeedStats(torrent: Torrent) {
 	};
 }
 
-export function registerTorrent(torrent: Torrent, provider?: string) {
-	if (torrentData.has(torrent)) return;
+export function getTorrentByUri(uri: string) {
+	for (const [torrent, data] of torrentData) {
+		if (!torrent.destroyed && data.uris.has(uri)) return torrent;
+	}
+	return undefined;
+}
+
+export function registerTorrent(
+	torrent: Torrent,
+	provider?: string,
+	uri?: string,
+) {
+	const existing = torrentData.get(torrent);
+	if (existing) {
+		if (uri) existing.uris.add(uri);
+		return;
+	}
 	const storageMode = getRuntimeConfig().config.storage.mode;
 	if (storageMode === "memory")
 		torrent.store = new TorrentStreamChunkStore(torrent);
@@ -176,6 +192,7 @@ export function registerTorrent(torrent: Torrent, provider?: string) {
 		: undefined;
 	torrentData.set(torrent, {
 		provider,
+		uris: new Set(uri ? [uri] : []),
 		streams: new Map(),
 		speeds: new LRU(300),
 		seed,

@@ -13,6 +13,7 @@ import {
 	destroyTorrent,
 	getSeedStats,
 	getStreams,
+	getTorrentByUri,
 	getTorrentProvider,
 } from "@/lib/torrent/streams";
 
@@ -105,7 +106,8 @@ export async function getTorrents(): Promise<TorrentStats> {
 
 export async function getPlaybackStats(uri: string) {
 	const request = parseTorrentRequest(decryptText(uri));
-	const torrent = await getTorrentClient().get(request.uri);
+	const torrent =
+		getTorrentByUri(request.uri) ?? (await getTorrentClient().get(request.uri));
 	if (!torrent || torrent.destroyed) return null;
 	return {
 		ready: torrent.ready,

@@ -27,7 +27,7 @@ export function getOrAddTorrent(
 			}
 			completed = true;
 			clearTimeout(timeout);
-			registerTorrent(torrent, provider);
+			registerTorrent(torrent, provider, uri);
 			resolve(torrent);
 		};
 
