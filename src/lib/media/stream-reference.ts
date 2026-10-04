@@ -19,7 +19,7 @@ const normalize = (value: string) =>
 async function getCatalog<T>(path: string): Promise<T | undefined> {
 	try {
 		const response = await fetch(`https://v3-cinemeta.strem.io/${path}`, {
-			next: { revalidate: 3600 },
+			next: { revalidate: 900 },
 			signal: AbortSignal.timeout(8000),
 		});
 		return response.ok ? await response.json() : undefined;
@@ -40,37 +40,28 @@ export async function resolveSeriesStreamReference(
 	const search = await getCatalog<{ metas: { id: string }[] }>(
 		`catalog/series/top/search=${encodeURIComponent(name)}.json`,
 	);
-	const candidates = [
-		...new Set(
-			(search?.metas || [])
-				.map((item) => item.id)
-				.filter((id) => /^tt\d+$/.test(id)),
-		),
-	].slice(0, 5);
-	const matches = (
-		await Promise.all(
-			candidates.map(async (imdbId) => {
-				const result = await getCatalog<{
-					meta: { videos?: CatalogEpisode[] };
-				}>(`meta/series/${imdbId}.json`);
-				const videos = result?.meta?.videos || [];
-				return [...new Set(videos.map((video) => video.season))]
-					.filter(
-						(number) =>
-							number > 0 &&
-							episodes.every((episode) =>
-								videos.some(
-									(video) =>
-										video.season === number &&
-										video.episode === episode.episode_number &&
-										normalize(video.name || "") === normalize(episode.name) &&
-										video.released?.slice(0, 10) === episode.air_date,
-								),
-							),
-					)
-					.map((number) => ({ imdbId, seasons: { [season]: number } }));
-			}),
+	const imdbId = (search?.metas || [])
+		.map((item) => item.id)
+		.find((id) => /^tt\d+$/.test(id));
+	if (!imdbId) return;
+	const result = await getCatalog<{
+		meta: { videos?: CatalogEpisode[] };
+	}>(`meta/series/${imdbId}.json`);
+	const videos = result?.meta?.videos || [];
+	const matches = [...new Set(videos.map((video) => video.season))]
+		.filter(
+			(number) =>
+				number > 0 &&
+				episodes.every((episode) =>
+					videos.some(
+						(video) =>
+							video.season === number &&
+							video.episode === episode.episode_number &&
+							normalize(video.name || "") === normalize(episode.name) &&
+							video.released?.slice(0, 10) === episode.air_date,
+					),
+				),
 		)
-	).flat();
+		.map((number) => ({ imdbId, seasons: { [season]: number } }));
 	return matches.length === 1 ? matches[0] : undefined;
 }
