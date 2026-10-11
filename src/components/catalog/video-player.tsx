@@ -1,10 +1,7 @@
 "use client";
 
-import {
-	type MoviElement,
-	MoviPlayer,
-	MoviTrack,
-} from "movi-player/react/slim";
+import { MoviElement } from "movi-player/element/slim";
+import { MoviPlayer, MoviTrack } from "movi-player/react/slim";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { getPlaybackStats } from "@/app/actions";
@@ -14,7 +11,6 @@ import type { StremioStream } from "@/lib/search/stremio";
 type PlayerProps = {
 	stream: StremioStream;
 	title: string;
-	poster?: string;
 	onClose: () => void;
 };
 
@@ -86,7 +82,6 @@ export default function VideoPlayer(props: PlayerProps) {
 function Playback({
 	stream,
 	title,
-	poster,
 	onClose,
 	status,
 	ready,
@@ -99,6 +94,143 @@ function Playback({
 	onRetry: () => void;
 }) {
 	const playerRef = useRef<MoviElement>(null);
+	useEffect(() => {
+		const player = playerRef.current;
+		if (!player) return;
+		const overlay = player.closest("dialog");
+		const viewport = document.querySelector<HTMLMetaElement>(
+			'meta[name="viewport"]',
+		);
+		const originalViewport = viewport?.content;
+		// Opt into the physical screen only during playback. Safe-area padding
+		// keeps the normal player clear of cutouts until fullscreen is selected.
+		if (viewport)
+			viewport.content = `${viewport.content.replace(/,?\s*viewport-fit=[^,]+/, "")}, viewport-fit=cover`;
+		const probe = document.createElement("div");
+		probe.style.cssText =
+			"position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)";
+		document.body.append(probe);
+		let edgeToEdge = false;
+		const updateFullscreenControl = () => {
+			const insets = getComputedStyle(probe);
+			const canExpandIntoCutout =
+				parseFloat(insets.paddingLeft) > 0 ||
+				parseFloat(insets.paddingRight) > 0;
+			const bounds = overlay?.getBoundingClientRect();
+			const fillsViewport =
+				bounds &&
+				Math.abs(bounds.left) < 1 &&
+				Math.abs(bounds.top) < 1 &&
+				Math.abs(bounds.width - window.innerWidth) < 1 &&
+				Math.abs(bounds.height - window.innerHeight) < 1;
+			// A viewport overlay is already the best fullscreen available on
+			// browsers without element fullscreen (notably iPhone Safari).
+			const redundant =
+				fillsViewport &&
+				!document.fullscreenEnabled &&
+				!canExpandIntoCutout &&
+				!edgeToEdge;
+			const tokens = new Set(
+				(player.getAttribute("controlslist") || "")
+					.split(/\s+/)
+					.filter(Boolean),
+			);
+			if (redundant) tokens.add("nofullscreen");
+			else tokens.delete("nofullscreen");
+			if (tokens.size)
+				player.setAttribute("controlslist", [...tokens].join(" "));
+			else player.removeAttribute("controlslist");
+		};
+		const onFullscreenRequest = (event: Event) => {
+			if (document.fullscreenEnabled || !overlay) return;
+			event.preventDefault();
+			edgeToEdge = !edgeToEdge;
+			overlay.toggleAttribute("data-edge-to-edge", edgeToEdge);
+			player.toggleAttribute("data-edge-to-edge", edgeToEdge);
+			player.setHostFullscreen(edgeToEdge);
+			updateFullscreenControl();
+		};
+		player.addEventListener("movi-fullscreen-request", onFullscreenRequest);
+		const observer = new ResizeObserver(updateFullscreenControl);
+		observer.observe(player);
+		updateFullscreenControl();
+		window.addEventListener("resize", updateFullscreenControl);
+		document.addEventListener("fullscreenchange", updateFullscreenControl);
+		return () => {
+			player.removeEventListener(
+				"movi-fullscreen-request",
+				onFullscreenRequest,
+			);
+			player.setHostFullscreen(false);
+			overlay?.removeAttribute("data-edge-to-edge");
+			probe.remove();
+			if (viewport && originalViewport !== undefined)
+				viewport.content = originalViewport;
+			observer.disconnect();
+			window.removeEventListener("resize", updateFullscreenControl);
+			document.removeEventListener("fullscreenchange", updateFullscreenControl);
+		};
+	}, []);
+	useEffect(() => {
+		const player = playerRef.current;
+		if (!player || !navigator.wakeLock) return;
+		let active = true;
+		let wanted = player.playing;
+		let pending = false;
+		let lock: WakeLockSentinel | null = null;
+		const shouldHold = () =>
+			active && wanted && document.visibilityState === "visible";
+		const release = () => {
+			const previous = lock;
+			lock = null;
+			if (previous) void previous.release().catch(() => {});
+		};
+		const update = async () => {
+			if (!shouldHold()) {
+				release();
+				return;
+			}
+			if (lock || pending) return;
+			pending = true;
+			try {
+				const acquired = await navigator.wakeLock.request("screen");
+				if (!shouldHold()) await acquired.release();
+				else {
+					lock = acquired;
+					acquired.addEventListener("release", () => {
+						if (lock === acquired) lock = null;
+					});
+				}
+			} catch {
+				// Low power mode, browser policy, or an insecure origin may deny it.
+			} finally {
+				pending = false;
+			}
+		};
+		const onStateChange = (event: Event) => {
+			const state = (event as CustomEvent<string>).detail;
+			if (state === "playing") wanted = true;
+			else if (state !== "buffering" && state !== "seeking") wanted = false;
+			void update();
+		};
+		const stop = () => {
+			wanted = false;
+			void update();
+		};
+		player.addEventListener("statechange", onStateChange);
+		for (const event of ["pause", "ended", "error", "loadstart"])
+			player.addEventListener(event, stop);
+		document.addEventListener("visibilitychange", update);
+		void update();
+		return () => {
+			active = false;
+			release();
+			player.removeEventListener("statechange", onStateChange);
+			for (const event of ["pause", "ended", "error", "loadstart"])
+				player.removeEventListener(event, stop);
+			document.removeEventListener("visibilitychange", update);
+		};
+	}, []);
 	useEffect(() => {
 		const root = playerRef.current?.shadowRoot;
 		if (!root) return;
@@ -180,6 +312,11 @@ function Playback({
             }
             :host(.torrent-preparing) .movi-title-back { pointer-events: auto; }
             .movi-unmute-overlay { top: auto; bottom: 110px; left: 50%; transform: translateX(-50%); }
+			:host([data-edge-to-edge]) .movi-controls-container {
+				padding-left: max(16px, env(safe-area-inset-left));
+				padding-right: max(16px, env(safe-area-inset-right));
+				padding-bottom: max(16px, env(safe-area-inset-bottom));
+			}
             .torrent-title-bubble {
                 display: flex; align-items: center; gap: 8px;
                 max-width: 100%; min-width: 0; padding: 8px 24px 8px 8px;
@@ -277,14 +414,13 @@ function Playback({
 				titlemode="both back"
 				src={ready ? stream.url : undefined}
 				title={title}
-				poster={poster}
 				controls
 				autoplay
 				playsinline
 				fastseek
 				sw="auto"
 				theme="dark"
-				wasmurl="/api/player/wasm"
+				wasmurl={`/api/player/wasm?v=${MoviElement.version}`}
 				style={{
 					display: "block",
 					width: "100%",

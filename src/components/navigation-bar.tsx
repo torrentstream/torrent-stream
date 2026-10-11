@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ArrowLeft, Menu, Settings } from "lucide-react";
+import { Activity, ArrowLeft, Compass, Menu, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -9,6 +9,7 @@ import { Logo } from "./logo";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
 
 const links = [
+	{ href: "/", label: "Browse", icon: Compass },
 	{ href: "/torrents", label: "Torrents", icon: Activity },
 	{ href: "/config", label: "Configuration", icon: Settings },
 ];

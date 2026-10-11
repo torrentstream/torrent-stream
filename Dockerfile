@@ -16,48 +16,38 @@ FROM oven/bun:${BUN_VERSION}-slim AS bun-image
 FROM serfriz/caddy-duckdns:${CADDY_VERSION} AS caddy-image
 
 # ==========================================
-# Stage 3: Build Next.js App
+# Stage 3: Install Shared Production Dependencies
 # ==========================================
-FROM node:${NODE_VERSION}-slim AS next-builder
+FROM node:${NODE_VERSION}-slim AS prod-deps
 
 # Install Python and Build Tools for C++ modules (like utp-native)
 RUN apt-get update && \
-    apt-get install -y python3 make g++ build-essential && \
+    apt-get install -y python3 build-essential && \
     rm -rf /var/lib/apt/lists/*
+
+# ARM64 has no utp-native prebuild; provide node-gyp for its source build.
+RUN npm install --global node-gyp@11.5.0
 
 # Install Bun by copying it from Stage 1
 COPY --from=bun-image /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 COPY package.json bun.lock ./
-COPY patches/ ./patches/
 
-# Install dependencies using Bun
+# Compile native runtime dependencies once per architecture.
+RUN bun install --frozen-lockfile --production
+
+# ==========================================
+# Stage 4: Build Next.js App
+# ==========================================
+FROM prod-deps AS next-builder
+
+# Add development dependencies while reusing the compiled runtime modules.
 RUN bun install --frozen-lockfile
 
 COPY . .
 
-# Build the app (You can use 'bun run build' or 'npm run build')
 RUN bun run build
-
-# ==========================================
-# Stage 4: Install Production Dependencies
-# ==========================================
-FROM node:${NODE_VERSION}-slim AS prod-deps
-
-# Install Python and Build Tools for C++ modules (like utp-native)
-RUN apt-get update && \
-    apt-get install -y python3 make g++ build-essential && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY --from=bun-image /usr/local/bin/bun /usr/local/bin/bun
-
-WORKDIR /app
-COPY package.json bun.lock ./
-COPY patches/ ./patches/
-
-# Install runtime dependencies only (no devDependencies)
-RUN bun install --frozen-lockfile --production
 
 # ==========================================
 # Stage 5: Final Production Image
@@ -83,6 +73,7 @@ COPY --from=next-builder /app/package.json ./package.json
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=next-builder /app/.next ./.next
 COPY --from=next-builder /app/dist ./dist
+COPY --from=next-builder /app/public ./public
 
 # Expose and Run
 EXPOSE 3000 443

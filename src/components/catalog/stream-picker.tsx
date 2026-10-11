@@ -20,14 +20,12 @@ export function StreamPicker({
 	error,
 	retry,
 	title,
-	poster,
 }: {
 	imdbId?: string | null;
 	data?: { streams: StremioStream[]; subtitleError?: string };
 	error?: Error;
 	retry: () => void;
 	title: string;
-	poster?: string;
 }) {
 	const [selected, setSelected] = useState<StremioStream | null>(null);
 	const streams = data?.streams.filter((stream) => stream.url) || [];
@@ -43,7 +41,6 @@ export function StreamPicker({
 				<PlayerOverlay
 					stream={selected}
 					title={title}
-					poster={poster}
 					onClose={() => setSelected(null)}
 				/>
 			)}
@@ -125,12 +122,10 @@ export function StreamPicker({
 function PlayerOverlay({
 	stream,
 	title,
-	poster,
 	onClose,
 }: {
 	stream: StremioStream;
 	title: string;
-	poster?: string;
 	onClose: () => void;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
@@ -157,13 +152,8 @@ function PlayerOverlay({
 			}}
 			className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-black p-0 text-white backdrop:bg-black open:flex open:flex-col"
 		>
-			<div className="min-h-0 flex-1 pb-[env(safe-area-inset-bottom)]">
-				<VideoPlayer
-					stream={stream}
-					title={title}
-					poster={poster}
-					onClose={onClose}
-				/>
+			<div className="player-surface min-h-0 flex-1">
+				<VideoPlayer stream={stream} title={title} onClose={onClose} />
 			</div>
 		</dialog>,
 		document.body,

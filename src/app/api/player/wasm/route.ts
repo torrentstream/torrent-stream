@@ -8,7 +8,7 @@ export async function GET() {
 	return new Response(new Uint8Array(wasm), {
 		headers: {
 			"Content-Type": "application/wasm",
-			"Cache-Control": "public, max-age=86400",
+			"Cache-Control": "no-cache",
 		},
 	});
 }

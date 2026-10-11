@@ -285,7 +285,6 @@ function TitleContent({
 								? `${titleName(title)}${titleYear(title) ? ` (${titleYear(title)})` : ""} · S${season} E${episode.episode_number} · ${episode.name}`
 								: `${titleName(title)}${titleYear(title) ? ` (${titleYear(title)})` : ""}`
 						}
-						poster={imageUrl(title.backdrop_path, "w1280")}
 					/>
 				</section>
 			)}

@@ -3,6 +3,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.player-surface {
+	padding: env(safe-area-inset-top) env(safe-area-inset-right)
+		env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+dialog[data-edge-to-edge] > .player-surface {
+	padding: 0;
+}
+
 @theme inline {
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
