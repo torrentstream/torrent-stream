@@ -10,14 +10,16 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { useSWRConfig } from "swr";
 import { type SaveConfigurationResult, saveConfiguration } from "@/app/actions";
+import { LanguageFlag } from "@/components/language-flag";
+import { useLanguage } from "@/components/language-provider";
 import type {
 	ProviderId,
 	RuntimeConfig,
 	SearchSortCriterion,
 	TorznabProviderConfig,
 } from "@/lib/config/schema";
+import { languageLabel } from "@/lib/i18n";
 import { formatStrings, TorrentFormat } from "@/lib/media/format";
 import { supportedLanguages } from "@/lib/media/language";
 import { Badge } from "./ui/badge";
@@ -61,7 +63,7 @@ function moveItem<T>(items: T[], moved: T, target: T) {
 }
 
 export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
-	const { cache, mutate } = useSWRConfig();
+	const { t } = useLanguage();
 	const [saved, setSaved] = useState(initialSnapshot);
 	const [draft, setDraft] = useState(() => cloneConfig(initialSnapshot.config));
 	const [saving, setSaving] = useState(false);
@@ -103,26 +105,24 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 				revision: result.revision,
 				providerOptions: saved.providerOptions,
 			};
-			if (result.config.tmdbLanguage !== saved.config.tmdbLanguage) {
-				await Promise.all(
-					[...cache.keys()]
-						.filter((key) => key.includes("/api/catalog?"))
-						.map((key) => mutate(key, undefined, { revalidate: false })),
-				);
-			}
 			setSaved(snapshot);
 			setDraft(cloneConfig(result.config));
 			setConfirmation(undefined);
 			setMessage(
 				result.clientRestarted
-					? `Saved. Torrent clients restarted${result.interruptedStreams ? ` and ${result.interruptedStreams} active stream${result.interruptedStreams === 1 ? " was" : "s were"} interrupted` : ""}.`
-					: "Configuration saved and applied.",
+					? result.interruptedStreams
+						? t(
+								"Saved. Torrent clients restarted and {count} active streams interrupted.",
+								{ count: result.interruptedStreams },
+							)
+						: t("Saved. Torrent clients restarted.")
+					: t("Configuration saved and applied."),
 			);
 		} catch (cause) {
 			setError(
 				cause instanceof Error
 					? cause.message
-					: "Could not save configuration.",
+					: t("Could not save configuration."),
 			);
 			setConfirmation(undefined);
 		} finally {
@@ -143,7 +143,7 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 					role="alert"
 					className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm text-amber-200"
 				>
-					{saved.warning}
+					{t(saved.warning)}
 				</div>
 			)}
 
@@ -163,13 +163,15 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 					<div className="min-w-0 text-sm">
 						{error ? (
 							<p role="alert" className="truncate text-destructive">
-								{error}
+								{t(error)}
 							</p>
 						) : message ? (
-							<p className="truncate text-green-500">{message}</p>
+							<p className="truncate text-green-500">{t(message)}</p>
 						) : (
 							<p className="text-muted-foreground">
-								{dirty ? "You have unsaved changes." : "All changes saved."}
+								{dirty
+									? t("You have unsaved changes.")
+									: t("All changes saved.")}
 							</p>
 						)}
 					</div>
@@ -183,14 +185,14 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 								setError(undefined);
 								setMessage(undefined);
 							}}
-							aria-label="Discard changes"
+							aria-label={t("Discard changes")}
 						>
 							<RotateCcw />
-							<span className="hidden sm:inline">Discard</span>
+							<span className="hidden sm:inline">{t("Discard")}</span>
 						</Button>
 						<Button type="submit" disabled={!dirty || saving}>
 							<Save />
-							{saving ? "Saving…" : "Save"}
+							{saving ? t("Saving…") : t("Save")}
 						</Button>
 					</div>
 				</div>
@@ -204,26 +206,29 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Restart torrent clients?</DialogTitle>
+						<DialogTitle>{t("Restart torrent clients?")}</DialogTitle>
 						<DialogDescription>
-							Changing storage mode or its data path rebuilds the torrent
-							clients.{" "}
+							{t(
+								"Changing storage mode or its data path rebuilds the torrent clients.",
+							)}{" "}
 							{confirmation?.activeStreams
-								? `${confirmation.activeStreams} active stream${confirmation.activeStreams === 1 ? "" : "s"} will be interrupted.`
-								: "There are no active streams."}{" "}
+								? t("{count} active streams will be interrupted.", {
+										count: confirmation.activeStreams,
+									})
+								: t("There are no active streams.")}{" "}
 							Downloaded files and seed state will be preserved.
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
 						<DialogClose render={<Button variant="outline" />}>
-							Cancel
+							{t("Cancel")}
 						</DialogClose>
 						<Button
 							onClick={() => void submit(true)}
 							disabled={saving}
 							variant="destructive"
 						>
-							Restart and save
+							{t("Restart and save")}
 						</Button>
 					</DialogFooter>
 				</DialogContent>
@@ -239,9 +244,10 @@ function StorageCard({
 	config: RuntimeConfig;
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
+	const { t } = useLanguage();
 	const storagePathId = useId();
 	return (
-		<Section title="Storage">
+		<Section title={t("Storage")}>
 			<div className="grid grid-cols-2 gap-2">
 				{(["memory", "file"] as const).map((mode) => (
 					<button
@@ -258,11 +264,11 @@ function StorageCard({
 								: "hover:bg-accent"
 						}`}
 					>
-						<span className="block font-medium capitalize">{mode}</span>
+						<span className="block font-medium capitalize">{t(mode)}</span>
 						<span className="text-xs text-muted-foreground">
 							{mode === "memory"
-								? "No downloaded data is retained."
-								: "Supports retention and seeding."}
+								? t("No downloaded data is retained.")
+								: t("Supports retention and seeding.")}
 						</span>
 					</button>
 				))}
@@ -270,8 +276,10 @@ function StorageCard({
 
 			{config.storage.mode === "memory" ? (
 				<NumberField
-					label="Memory per stream"
-					description="Maximum chunk cache allocated to each active stream."
+					label={t("Memory per stream")}
+					description={t(
+						"Maximum chunk cache allocated to each active stream.",
+					)}
 					value={config.storage.streamMemoryLimit / 1024 ** 2}
 					unit="MB"
 					min={1}
@@ -285,7 +293,7 @@ function StorageCard({
 			) : (
 				<div className="flex flex-col gap-3">
 					<div className="flex flex-col gap-2">
-						<Label htmlFor={storagePathId}>Torrent storage path</Label>
+						<Label htmlFor={storagePathId}>{t("Torrent storage path")}</Label>
 						<Input
 							id={storagePathId}
 							value={config.storage.path}
@@ -298,13 +306,16 @@ function StorageCard({
 							autoComplete="off"
 						/>
 						<p className="text-xs leading-relaxed text-muted-foreground">
-							Downloaded torrent data is stored here. The directory is created
-							when you save.
+							{t(
+								"Downloaded torrent data is stored here. The directory is created when you save.",
+							)}
 						</p>
 					</div>
 					<Toggle
-						label="Keep downloaded files"
-						description="Do not delete payload files when torrents leave the client."
+						label={t("Keep downloaded files")}
+						description={t(
+							"Do not delete payload files when torrents leave the client.",
+						)}
 						checked={config.storage.keepFiles}
 						onChange={(checked) =>
 							update((next) => {
@@ -313,8 +324,10 @@ function StorageCard({
 						}
 					/>
 					<Toggle
-						label="Download while idle"
-						description="Continue downloading files that have already been streamed."
+						label={t("Download while idle")}
+						description={t(
+							"Continue downloading files that have already been streamed.",
+						)}
 						checked={config.storage.idleDownload}
 						onChange={(checked) =>
 							update((next) => {
@@ -335,11 +348,12 @@ function TorrentCard({
 	config: RuntimeConfig;
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
+	const { t } = useLanguage();
 	return (
-		<Section title="Torrent client">
+		<Section title={t("Torrent client")}>
 			<div className="grid gap-4 sm:grid-cols-2">
 				<SpeedField
-					label="Download limit"
+					label={t("Download limit")}
 					value={config.torrent.downloadLimit}
 					onChange={(value) =>
 						update((next) => {
@@ -348,7 +362,7 @@ function TorrentCard({
 					}
 				/>
 				<SpeedField
-					label="Upload limit"
+					label={t("Upload limit")}
 					value={config.torrent.uploadLimit}
 					onChange={(value) =>
 						update((next) => {
@@ -357,8 +371,10 @@ function TorrentCard({
 					}
 				/>
 				<NumberField
-					label="Add timeout"
-					description="Cancel when torrent metadata cannot be fetched within this time."
+					label={t("Add timeout")}
+					description={t(
+						"Cancel when torrent metadata cannot be fetched within this time.",
+					)}
 					value={config.torrent.addTimeout / 1000}
 					unit="seconds"
 					min={1}
@@ -370,8 +386,10 @@ function TorrentCard({
 					}
 				/>
 				<NumberField
-					label="Stream idle timeout"
-					description="A stream is released after receiving no reads for this long."
+					label={t("Stream idle timeout")}
+					description={t(
+						"A stream is released after receiving no reads for this long.",
+					)}
 					value={config.torrent.idleTimeout / 1000}
 					unit="seconds"
 					min={1}
@@ -383,8 +401,10 @@ function TorrentCard({
 					}
 				/>
 				<NumberField
-					label="Torrent removal delay"
-					description="How long an unused, non-seeding torrent remains loaded."
+					label={t("Torrent removal delay")}
+					description={t(
+						"How long an unused, non-seeding torrent remains loaded.",
+					)}
 					value={config.torrent.removeTimeout / 1000}
 					unit="seconds"
 					min={0}
@@ -396,8 +416,10 @@ function TorrentCard({
 					}
 				/>
 				<NumberField
-					label="Web request timeout"
-					description="Cancel provider and metadata web requests after this time."
+					label={t("Web request timeout")}
+					description={t(
+						"Cancel provider and metadata web requests after this time.",
+					)}
 					value={config.search.requestTimeout / 1000}
 					unit="seconds"
 					min={1}
@@ -420,6 +442,7 @@ function SearchCard({
 	config: RuntimeConfig;
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
+	const { t, language: interfaceLanguage } = useLanguage();
 	const allFormats = Object.values(TorrentFormat);
 	const allLanguages = supportedLanguages.map(({ code }) => code);
 	const allFormatsSelected = config.search.formats.length === allFormats.length;
@@ -443,10 +466,10 @@ function SearchCard({
 	];
 
 	return (
-		<Section title="Torrent search">
+		<Section title={t("Torrent search")}>
 			<div>
 				<div className="mb-2 flex items-center justify-between">
-					<Label>Formats</Label>
+					<Label>{t("Formats")}</Label>
 					<Button
 						type="button"
 						variant="outline"
@@ -457,7 +480,7 @@ function SearchCard({
 							})
 						}
 					>
-						{allFormatsSelected ? "Clear all" : "Allow all"}
+						{allFormatsSelected ? t("Clear all") : t("Allow all")}
 					</Button>
 				</div>
 				<div className="flex flex-wrap gap-2">
@@ -484,7 +507,7 @@ function SearchCard({
 
 			<div>
 				<div className="mb-2 flex items-center justify-between">
-					<Label>Languages</Label>
+					<Label>{t("Languages")}</Label>
 					<div className="flex gap-1">
 						<Button
 							type="button"
@@ -498,7 +521,7 @@ function SearchCard({
 								})
 							}
 						>
-							{allLanguagesSelected ? "Clear all" : "Allow all"}
+							{allLanguagesSelected ? t("Clear all") : t("Allow all")}
 						</Button>
 					</div>
 				</div>
@@ -555,7 +578,8 @@ function SearchCard({
 									});
 								}}
 							>
-								{language.flag} {language.name}
+								<LanguageFlag code={language.code} />
+								{languageLabel(language.code, interfaceLanguage, language.name)}
 							</Chip>
 						);
 					})}
@@ -563,7 +587,7 @@ function SearchCard({
 			</div>
 
 			<div>
-				<Label>Sort priority</Label>
+				<Label>{t("Sort priority")}</Label>
 				<div className="mt-2 flex flex-wrap gap-2">
 					{config.search.sortPriority.map((criterion) => (
 						<Badge
@@ -595,7 +619,7 @@ function SearchCard({
 								draggedSortCriterion.current = undefined;
 							}}
 						>
-							{criterion[0].toUpperCase() + criterion.slice(1)}
+							{t(criterion[0].toUpperCase() + criterion.slice(1))}
 						</Badge>
 					))}
 				</div>
@@ -613,6 +637,7 @@ function ProvidersCard({
 	providerOptions: ProviderOption[];
 	update: (recipe: (config: RuntimeConfig) => void) => void;
 }) {
+	const { t } = useLanguage();
 	const fileMode = config.storage.mode === "file";
 	const torrentio = config.providers.torrentio;
 	const torznab = config.providers.torznab;
@@ -631,7 +656,7 @@ function ProvidersCard({
 	});
 
 	return (
-		<Section title="Providers">
+		<Section title={t("Torrent providers")}>
 			{config.search.providerOrder.map((provider) => {
 				if (provider === "ncore" || provider === "insane") {
 					return (
@@ -715,6 +740,7 @@ function TorznabProvider({
 	sort: ProviderSortProps;
 	onChange: (config: TorznabProviderConfig) => void;
 }) {
+	const { t } = useLanguage();
 	const change = (recipe: (next: TorznabProviderConfig) => void) => {
 		const next = structuredClone(config);
 		recipe(next);
@@ -725,7 +751,9 @@ function TorznabProvider({
 		<ProviderBox sort={sort}>
 			<Toggle
 				label={name}
-				description="Search one or more Jackett, Prowlarr, Harbrr, or other Torznab-compatible feeds."
+				description={t(
+					"Search one or more Jackett, Prowlarr, Harbrr, or other Torznab-compatible feeds.",
+				)}
 				checked={config.enabled}
 				onChange={(enabled) =>
 					change((next) => {
@@ -742,7 +770,9 @@ function TorznabProvider({
 							className="grid gap-4 rounded-lg border p-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]"
 						>
 							<div className="flex flex-col gap-2">
-								<Label htmlFor={`torznab-url-${index}`}>Endpoint URL</Label>
+								<Label htmlFor={`torznab-url-${index}`}>
+									{t("Endpoint URL")}
+								</Label>
 								<Input
 									id={`torznab-url-${index}`}
 									type="url"
@@ -757,7 +787,7 @@ function TorznabProvider({
 							</div>
 							<PasswordField
 								id={`torznab-api-key-${index}`}
-								label="API key"
+								label={t("API key")}
 								autoComplete="off"
 								value={feed.apiKey}
 								onChange={(apiKey) =>
@@ -771,7 +801,9 @@ function TorznabProvider({
 								variant="destructive"
 								size="icon"
 								className="self-end"
-								aria-label={`Remove Torznab feed ${index + 1}`}
+								aria-label={t("Remove Torznab feed {number}", {
+									number: index + 1,
+								})}
 								onClick={() =>
 									change((next) => {
 										next.feeds.splice(index, 1);
@@ -793,7 +825,7 @@ function TorznabProvider({
 						}
 					>
 						<Plus />
-						Add feed
+						{t("Add feed")}
 					</Button>
 				</div>
 			)}
@@ -814,10 +846,11 @@ function TorrentioTrackers({
 	onAllTrackersChange: (enabled: boolean) => void;
 	onChange: (sources: string[]) => void;
 }) {
+	const { t } = useLanguage();
 	return (
 		<div className="mt-4 border-t pt-4">
 			<Toggle
-				label="Enable all trackers"
+				label={t("Enable all trackers")}
 				checked={allTrackers}
 				onChange={onAllTrackersChange}
 			/>
@@ -862,6 +895,7 @@ function PrivateProvider({
 	sort: ProviderSortProps;
 	onChange: (config: PrivateProviderConfig) => void;
 }) {
+	const { t } = useLanguage();
 	const change = (recipe: (next: PrivateProviderConfig) => void) => {
 		const next = structuredClone(config);
 		recipe(next);
@@ -881,7 +915,7 @@ function PrivateProvider({
 			{config.enabled && (
 				<div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
 					<div className="flex flex-col gap-2">
-						<Label htmlFor={`${name}-username`}>Username</Label>
+						<Label htmlFor={`${name}-username`}>{t("Username")}</Label>
 						<Input
 							id={`${name}-username`}
 							value={config.username}
@@ -905,8 +939,10 @@ function PrivateProvider({
 					{fileMode && (
 						<div className="sm:col-span-2">
 							<Toggle
-								label="Enable seeding"
-								description="Keep torrents active until the provider no longer lists them as requiring seed."
+								label={t("Enable seeding")}
+								description={t(
+									"Keep torrents active until the provider no longer lists them as requiring seed.",
+								)}
 								checked={config.seeding}
 								onChange={(seeding) =>
 									change((next) => {
@@ -929,12 +965,13 @@ function MetadataCard({
 	config: RuntimeConfig;
 	update: (recipe: (next: RuntimeConfig) => void) => void;
 }) {
+	const { t } = useLanguage();
 	return (
-		<Section title="Catalog">
+		<Section title={t("Catalog")}>
 			<div className="space-y-2">
 				<PasswordField
 					id="tmdb-api-key"
-					label="TMDB API key"
+					label={t("TMDB API key")}
 					autoComplete="off"
 					value={config.tmdbApiKey || ""}
 					onChange={(value) =>
@@ -944,30 +981,20 @@ function MetadataCard({
 					}
 				/>
 				<p className="text-xs leading-relaxed text-muted-foreground">
-					Used for movie and TV metadata. Leave empty to use the default key.
-					Get an API key from your{" "}
+					{t(
+						"Used for movie and TV metadata. Leave empty to use the default key. Get an API key from your",
+					)}{" "}
 					<a
 						className="underline underline-offset-4"
 						href="https://www.themoviedb.org/settings/api"
 						target="_blank"
 						rel="noreferrer"
 					>
-						TMDB account
+						{t("TMDB account")}
 					</a>
 					.
 				</p>
 			</div>
-			<LanguageSelection
-				selected={[config.tmdbLanguage]}
-				onSelect={(language) =>
-					update((next) => {
-						next.tmdbLanguage = language;
-					})
-				}
-			/>
-			<p className="text-xs leading-relaxed text-muted-foreground">
-				Missing metadata text falls back to English.
-			</p>
 		</Section>
 	);
 }
@@ -979,12 +1006,13 @@ function SubtitlesCard({
 	config: RuntimeConfig;
 	update: (recipe: (next: RuntimeConfig) => void) => void;
 }) {
+	const { t } = useLanguage();
 	return (
-		<Section title="Subtitles">
+		<Section title={t("Subtitles")}>
 			<div className="space-y-2">
 				<PasswordField
 					id="opensubtitles-api-key"
-					label="OpenSubtitles API key"
+					label={t("OpenSubtitles API key")}
 					autoComplete="off"
 					value={config.opensubtitles.apiKey}
 					onChange={(value) =>
@@ -994,15 +1022,16 @@ function SubtitlesCard({
 					}
 				/>
 				<p className="text-xs leading-relaxed text-muted-foreground">
-					Used for subtitle search. Leave empty to use the default key. Get an
-					API key from your{" "}
+					{t(
+						"Used for subtitle search. Leave empty to use the default key. Get an API key from your",
+					)}{" "}
 					<a
 						className="underline underline-offset-4"
 						href="https://www.opensubtitles.com/consumers"
 						target="_blank"
 						rel="noreferrer"
 					>
-						OpenSubtitles account
+						{t("OpenSubtitles account")}
 					</a>
 					.
 				</p>
@@ -1010,7 +1039,9 @@ function SubtitlesCard({
 			<div className="space-y-2">
 				<div className="grid gap-6 sm:grid-cols-2">
 					<div className="flex flex-col gap-2">
-						<Label htmlFor="opensubtitles-username">Username (optional)</Label>
+						<Label htmlFor="opensubtitles-username">
+							{t("Username (optional)")}
+						</Label>
 						<Input
 							id="opensubtitles-username"
 							autoComplete="username"
@@ -1024,7 +1055,7 @@ function SubtitlesCard({
 					</div>
 					<PasswordField
 						id="opensubtitles-password"
-						label="Password (optional)"
+						label={t("Password (optional)")}
 						value={config.opensubtitles.password}
 						onChange={(value) =>
 							update((next) => {
@@ -1034,8 +1065,9 @@ function SubtitlesCard({
 					/>
 				</div>
 				<p className="text-xs leading-relaxed text-muted-foreground">
-					Sign in to use your account’s download allowance. Without a login,
-					OpenSubtitles applies its anonymous download limit.
+					{t(
+						"Sign in to use your account’s download allowance. Without a login, OpenSubtitles applies its anonymous download limit.",
+					)}
 				</p>
 			</div>
 			<LanguageSelection
@@ -1053,8 +1085,9 @@ function SubtitlesCard({
 				}
 			/>
 			<p className="text-xs leading-relaxed text-muted-foreground">
-				Choose subtitle languages. With none selected, subtitle search is
-				disabled.
+				{t(
+					"Choose subtitle languages. With none selected, subtitle search is disabled.",
+				)}
 			</p>
 		</Section>
 	);
@@ -1069,10 +1102,11 @@ function LanguageSelection({
 	multiple?: boolean;
 	onSelect: (language: string) => void;
 }) {
+	const { t, language: interfaceLanguage } = useLanguage();
 	return (
 		<fieldset className="space-y-2">
 			<legend className="text-sm font-medium">
-				{multiple ? "Languages" : "Language"}
+				{multiple ? t("Languages") : t("Language")}
 			</legend>
 			<div className="flex flex-wrap gap-2">
 				{[
@@ -1084,7 +1118,8 @@ function LanguageSelection({
 						selected={selected.includes(language.code)}
 						onClick={() => onSelect(language.code)}
 					>
-						{language.flag} {language.name}
+						<LanguageFlag code={language.code} />
+						{languageLabel(language.code, interfaceLanguage, language.name)}
 					</Chip>
 				))}
 			</div>
@@ -1125,9 +1160,10 @@ function ProviderBox({
 	children: React.ReactNode;
 	sort?: ProviderSortProps;
 }) {
+	const { t } = useLanguage();
 	return (
 		<fieldset
-			aria-label={sort ? `${sort.name} provider` : undefined}
+			aria-label={sort ? t("{name} provider", { name: sort.name }) : undefined}
 			className="rounded-xl border p-4"
 			onDragEnter={(event) => {
 				if (!sort) return;
@@ -1150,7 +1186,7 @@ function ProviderBox({
 					<button
 						type="button"
 						draggable
-						aria-label={`Reorder ${sort.name}`}
+						aria-label={t("Reorder {name}", { name: sort.name })}
 						className="mt-0.5 cursor-grab text-muted-foreground hover:text-foreground active:cursor-grabbing"
 						onDragStart={(event) => {
 							sort.draggedProvider.current = sort.provider;
@@ -1229,6 +1265,7 @@ function NumberField({
 	valueResolution?: number;
 	onChange: (value: number) => void;
 }) {
+	const { t } = useLanguage();
 	const id = useId();
 	const normalizedValue = String(Number.isFinite(value) ? value : 0);
 	const [inputValue, setInputValue] = useState(normalizedValue);
@@ -1251,7 +1288,7 @@ function NumberField({
 
 	return (
 		<div className="flex flex-col gap-2">
-			<Label htmlFor={id}>{label}</Label>
+			<Label htmlFor={id}>{t(label)}</Label>
 			<div className="flex items-center gap-2">
 				<Input
 					id={id}
@@ -1297,12 +1334,13 @@ function SpeedField({
 	value: number;
 	onChange: (value: number) => void;
 }) {
+	const { t } = useLanguage();
 	const unlimited = value < 0;
 	const id = useId();
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex items-center justify-between">
-				<Label htmlFor={id}>{label}</Label>
+				<Label htmlFor={id}>{t(label)}</Label>
 				<label className="flex items-center gap-2 text-xs text-muted-foreground">
 					<input
 						type="checkbox"
@@ -1316,7 +1354,7 @@ function SpeedField({
 						}
 						className="size-4 accent-primary"
 					/>
-					Unlimited
+					{t("Unlimited")}
 				</label>
 			</div>
 			<div className="flex items-center gap-2">
@@ -1327,7 +1365,7 @@ function SpeedField({
 					step={1}
 					disabled={unlimited}
 					value={unlimited ? "" : value}
-					placeholder="Unlimited"
+					placeholder={t("Unlimited")}
 					onChange={(event) => onChange(Math.round(Number(event.target.value)))}
 				/>
 				<span className="shrink-0 text-sm text-muted-foreground">B/s</span>
@@ -1349,10 +1387,11 @@ function PasswordField({
 	value: string;
 	onChange: (value: string) => void;
 }) {
+	const { t } = useLanguage();
 	const [visible, setVisible] = useState(false);
 	return (
 		<div className="flex flex-col gap-2">
-			<Label htmlFor={id}>{label}</Label>
+			<Label htmlFor={id}>{t(label)}</Label>
 			<div className="relative">
 				<Input
 					id={id}
@@ -1366,7 +1405,7 @@ function PasswordField({
 					type="button"
 					className="absolute right-0 top-0 flex size-9 items-center justify-center text-muted-foreground hover:text-foreground"
 					onClick={() => setVisible((current) => !current)}
-					aria-label={visible ? "Hide password" : "Show password"}
+					aria-label={visible ? t("Hide password") : t("Show password")}
 					aria-pressed={visible}
 				>
 					{visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -1411,7 +1450,7 @@ function Chip({
 			onDragOver={onDragOver}
 			onDrop={onDrop}
 			onDragEnd={onDragEnd}
-			className={`min-h-9 rounded-full border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed ${
+			className={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition disabled:cursor-not-allowed ${
 				draggable ? "cursor-pointer active:cursor-grabbing " : ""
 			}${
 				selected

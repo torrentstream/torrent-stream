@@ -8,6 +8,14 @@
 		env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
+/* Match Movi's accent to the app's primary color. */
+.app-player {
+	--movi-primary: var(--primary);
+	--movi-accent: var(--primary);
+	--movi-brand-fill: var(--primary);
+	--movi-gradient: var(--primary);
+}
+
 dialog[data-edge-to-edge] > .player-surface {
 	padding: 0;
 }

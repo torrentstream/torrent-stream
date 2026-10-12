@@ -3,10 +3,11 @@
 import { Film, Layers, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
+import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
+import { formatDate } from "@/lib/i18n";
 import {
 	type Episode,
-	episodeAirDate,
 	fetchCatalog,
 	imageUrl,
 	type MediaType,
@@ -21,20 +22,25 @@ import { LoadError, Loading } from "./load-state";
 import { StreamPicker } from "./stream-picker";
 
 export function TitleView({ type, id }: { type: MediaType; id: string }) {
+	const { t, language } = useLanguage();
 	const {
 		data: title,
 		error,
 		mutate,
-	} = useSWR<TitleDetails>(`/api/catalog?type=${type}&id=${id}`, fetchCatalog, {
-		revalidateOnFocus: false,
-		shouldRetryOnError: false,
-	});
+	} = useSWR<TitleDetails>(
+		`/api/catalog?type=${type}&id=${id}&language=${language}`,
+		fetchCatalog,
+		{
+			revalidateOnFocus: false,
+			shouldRetryOnError: false,
+		},
+	);
 	return (
 		<div className="space-y-6">
 			{error ? (
 				<LoadError error={error} retry={() => mutate()} />
 			) : !title ? (
-				<Loading>Loading title…</Loading>
+				<Loading>{t("Loading title…")}</Loading>
 			) : (
 				<TitleContent title={title} type={type} />
 			)}
@@ -49,6 +55,7 @@ function TitleContent({
 	title: TitleDetails;
 	type: MediaType;
 }) {
+	const { t, language } = useLanguage();
 	const seasons = (title.seasons || []).filter(
 		(season) => season.episode_count > 0,
 	);
@@ -58,7 +65,7 @@ function TitleContent({
 	const [episode, setEpisode] = useState<Episode | null>(null);
 	const episodes = useSWR<SeasonDetails>(
 		type === "tv" && season !== undefined
-			? `/api/catalog?type=tv&id=${title.id}&season=${season}`
+			? `/api/catalog?type=tv&id=${title.id}&season=${season}&language=${language}`
 			: null,
 		fetchCatalog,
 		{ revalidateOnFocus: false, shouldRetryOnError: false },
@@ -139,7 +146,7 @@ function TitleContent({
 							)}
 							{title.runtime ? (
 								<Badge variant="outline" className="bg-background/20">
-									{title.runtime} min
+									{t("{minutes} min", { minutes: title.runtime })}
 								</Badge>
 							) : null}
 							{title.genres.map((genre) => (
@@ -153,7 +160,7 @@ function TitleContent({
 							))}
 						</div>
 						<p className="mt-6 max-w-3xl text-sm leading-7 text-foreground/80">
-							{title.overview || "No synopsis available yet."}
+							{title.overview || t("No synopsis available yet.")}
 						</p>
 					</div>
 				</div>
@@ -162,17 +169,19 @@ function TitleContent({
 				<section className="space-y-6">
 					{!seasons.length ? (
 						<p className="py-6 text-muted-foreground">
-							No episodes are available yet.
+							{t("No episodes are available yet.")}
 						</p>
 					) : (
 						<>
 							<div className="flex items-center justify-between gap-4">
 								<div className="flex items-center gap-3">
-									<h2 className="text-xl font-semibold">Episodes</h2>
+									<h2 className="text-xl font-semibold">{t("Episodes")}</h2>
 									{episodes.data && (
 										<Badge
 											variant="secondary"
-											aria-label={`${episodes.data.episodes.length} episodes`}
+											aria-label={t("{count} episodes", {
+												count: episodes.data.episodes.length,
+											})}
 										>
 											{episodes.data.episodes.length}
 										</Badge>
@@ -180,7 +189,7 @@ function TitleContent({
 								</div>
 								<FilterSelect
 									icon={Layers}
-									aria-label="Season"
+									aria-label={t("Season")}
 									value={season}
 									onChange={(event) => {
 										setSeason(Number(event.target.value));
@@ -200,10 +209,10 @@ function TitleContent({
 									retry={() => episodes.mutate()}
 								/>
 							) : !episodes.data ? (
-								<Loading>Loading episodes…</Loading>
+								<Loading>{t("Loading episodes…")}</Loading>
 							) : !episodes.data.episodes.length ? (
 								<p className="py-6 text-muted-foreground">
-									No episodes in this season yet.
+									{t("No episodes in this season yet.")}
 								</p>
 							) : (
 								<div
@@ -217,7 +226,7 @@ function TitleContent({
 												type="button"
 												key={item.id}
 												aria-pressed={episode?.id === item.id}
-												title={item.overview || "No synopsis available."}
+												title={item.overview || t("No synopsis available.")}
 												onClick={() => setEpisode({ ...item })}
 												className={`group flex min-w-0 flex-col overflow-hidden rounded-xl border text-left shadow-xs transition hover:border-foreground/30 ${episode?.id === item.id ? "border-foreground/40 bg-accent" : "bg-card"}`}
 											>
@@ -236,14 +245,18 @@ function TitleContent({
 														variant="secondary"
 														className="absolute bottom-3 left-3 bg-black/75 text-white"
 													>
-														Episode {item.episode_number}
+														{t("Episode {number}", {
+															number: item.episode_number,
+														})}
 													</Badge>
 													{typeof item.vote_average === "number" &&
 														item.vote_average > 0 && (
 															<Badge
 																variant="secondary"
 																className="absolute bottom-3 right-3 bg-black/75 text-white"
-																aria-label={`Rating ${item.vote_average.toFixed(1)} out of 10`}
+																aria-label={t("Rating {rating} out of 10", {
+																	rating: item.vote_average.toFixed(1),
+																})}
 															>
 																<Star className="size-3 fill-amber-300 text-amber-300" />
 																{item.vote_average.toFixed(1)}
@@ -253,11 +266,14 @@ function TitleContent({
 												<span className="block min-w-0 flex-1 p-4">
 													<span className="block font-medium">{item.name}</span>
 													<span className="mt-1 block text-xs text-muted-foreground">
-														{episodeAirDate(item.air_date)}
-														{item.runtime ? ` · ${item.runtime} min` : ""}
+														{formatDate(item.air_date, language) ||
+															t("Air date TBA")}
+														{item.runtime
+															? ` · ${t("{minutes} min", { minutes: item.runtime })}`
+															: ""}
 													</span>
 													<span className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
-														{item.overview || "No synopsis available."}
+														{item.overview || t("No synopsis available.")}
 													</span>
 												</span>
 											</button>
@@ -272,7 +288,7 @@ function TitleContent({
 				<section
 					ref={streamsRef}
 					className="space-y-6 scroll-mt-24"
-					aria-label="Streams"
+					aria-label={t("Streams")}
 				>
 					<StreamPicker
 						key={streamId}
@@ -282,7 +298,7 @@ function TitleContent({
 						retry={() => streams.mutate()}
 						title={
 							episode
-								? `${titleName(title)}${titleYear(title) ? ` (${titleYear(title)})` : ""} · S${season} E${episode.episode_number} · ${episode.name}`
+								? `${titleName(title)}${titleYear(title) ? ` (${titleYear(title)})` : ""} · S${season} E${episode.episode_number} · ${episodes.data?.episodes.find((item) => item.id === episode.id)?.name || episode.name}`
 								: `${titleName(title)}${titleYear(title) ? ` (${titleYear(title)})` : ""}`
 						}
 					/>

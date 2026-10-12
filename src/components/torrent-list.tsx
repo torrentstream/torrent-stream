@@ -19,6 +19,7 @@ import { useState } from "react";
 import { Area, AreaChart } from "recharts";
 import useSWR from "swr";
 import { getTorrents, removeTorrent, type TorrentStats } from "@/app/actions";
+import { useLanguage } from "@/components/language-provider";
 import {
 	type ChartConfig,
 	ChartContainer,
@@ -42,6 +43,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 
 export function TorrentList({ torrents }: { torrents: TorrentStats }) {
+	const { t } = useLanguage();
 	const [cardsParent] = useAutoAnimate();
 
 	const { data, mutate } = useSWR("torrents", getTorrents, {
@@ -52,7 +54,7 @@ export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 	return (
 		<div ref={cardsParent} className="flex flex-col gap-6">
 			<div className="flex min-h-10 items-center gap-3">
-				<h1 className="text-xl font-semibold">Active torrents</h1>
+				<h1 className="text-xl font-semibold">{t("Active torrents")}</h1>
 				<Badge variant="secondary">{data.torrents.length}</Badge>
 			</div>
 			{data.torrents.length === 0 && (
@@ -60,16 +62,17 @@ export function TorrentList({ torrents }: { torrents: TorrentStats }) {
 					key="no-torrents"
 					className="rounded-xl border bg-card p-8 text-center"
 				>
-					<h2 className="font-medium">No active torrents</h2>
+					<h2 className="font-medium">{t("No active torrents")}</h2>
 					<p className="mt-2 text-sm text-muted-foreground">
-						Start watching some streams before you can monitor torrent progress
-						on this page.
+						{t(
+							"Start watching some streams before you can monitor torrent progress on this page.",
+						)}
 					</p>
 					<Link
 						href="/"
 						className="mt-4 inline-block text-sm underline underline-offset-4"
 					>
-						Browse titles
+						{t("Browse titles")}
 					</Link>
 				</div>
 			)}
@@ -99,6 +102,7 @@ function TorrentCard({
 	showDeleteFiles?: boolean;
 	onRemoved: () => Promise<void>;
 }) {
+	const { t } = useLanguage();
 	const [filesParent] = useAutoAnimate();
 	const [badgeParent] = useAutoAnimate();
 	const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -140,8 +144,8 @@ function TorrentCard({
 	}
 
 	const chartConfig: ChartConfig = {
-		download: { label: "Download", color: "white" },
-		upload: { label: "Upload", color: "var(--chart-2)" },
+		download: { label: t("Download"), color: "white" },
+		upload: { label: t("Upload"), color: "var(--chart-2)" },
 	};
 
 	return (
@@ -151,11 +155,13 @@ function TorrentCard({
 					<div className="md:text-lg font-bold">{displayName}</div>
 					<div ref={badgeParent} className="flex items-center gap-2">
 						{torrent.streams ? (
-							<Badge className="bg-green-800 text-white">Streaming</Badge>
+							<Badge className="bg-green-800 text-white">
+								{t("Streaming")}
+							</Badge>
 						) : torrent.seeding ? (
-							<Badge className="bg-blue-800 text-white">Seeding</Badge>
+							<Badge className="bg-blue-800 text-white">{t("Seeding")}</Badge>
 						) : (
-							<Badge>Idle</Badge>
+							<Badge>{t("Idle")}</Badge>
 						)}
 						<Dialog
 							open={removeDialogOpen}
@@ -175,15 +181,14 @@ function TorrentCard({
 								}
 							>
 								<Trash2 />
-								Remove
+								{t("Remove")}
 							</DialogTrigger>
 							<DialogContent>
 								<DialogHeader>
-									<DialogTitle>Remove torrent?</DialogTitle>
+									<DialogTitle>{t("Remove torrent?")}</DialogTitle>
 									<DialogDescription>
-										Are you sure you want to remove{" "}
-										<span className="font-bold">{displayName}</span> from the
-										torrent client?
+										{t("Remove torrent?")}{" "}
+										<span className="font-bold">{displayName}</span>
 									</DialogDescription>
 								</DialogHeader>
 								{showDeleteFiles && (
@@ -194,19 +199,19 @@ function TorrentCard({
 											onChange={(e) => setDeleteFiles(e.target.checked)}
 											className="accent-destructive"
 										/>
-										Delete downloaded files
+										{t("Delete downloaded files")}
 									</label>
 								)}
 								<DialogFooter>
 									<DialogClose render={<Button variant="outline" />}>
-										No
+										{t("No")}
 									</DialogClose>
 									<Button
 										variant="destructive"
 										onClick={handleRemove}
 										disabled={isRemoving}
 									>
-										Yes
+										{t("Yes")}
 									</Button>
 								</DialogFooter>
 							</DialogContent>
@@ -318,7 +323,7 @@ function TorrentCard({
 				<div ref={filesParent}>
 					{files.length > 0 && (
 						<div key="header" className="mt-4 font-semibold">
-							Files:
+							{t("Files:")}
 						</div>
 					)}
 					{files.map((file) => (

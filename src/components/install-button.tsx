@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { InstallDialog } from "./install-dialog";
 import { StremioIcon } from "./stremio-icon";
 import { Button } from "./ui/button";
 
 export function InstallButton({ fullWidth = false }: { fullWidth?: boolean }) {
+	const { t } = useLanguage();
 	const [protocol, setProtocol] = useState("");
 	const [host, setHost] = useState("");
 	const [dialogOpen, setDialogOpen] = useState(false);
@@ -23,11 +25,13 @@ export function InstallButton({ fullWidth = false }: { fullWidth?: boolean }) {
 			>
 				<StremioIcon />
 				{fullWidth ? (
-					"Install Stremio Addon"
+					t("Install Stremio Addon")
 				) : (
 					<>
-						<span className="hidden md:inline">Install Stremio Addon</span>
-						<span className="md:hidden">Install</span>
+						<span className="hidden md:inline">
+							{t("Install Stremio Addon")}
+						</span>
+						<span className="md:hidden">{t("Install")}</span>
 					</>
 				)}
 			</Button>

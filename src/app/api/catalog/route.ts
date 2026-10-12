@@ -51,6 +51,7 @@ export async function GET(request: NextRequest) {
 	}
 
 	const config = getRuntimeConfig().config;
+	const language = params.get("language") === "hu" ? "hu" : "en";
 	const key = config.tmdbApiKey || DEFAULT_TMDB_API_KEY;
 
 	const cutoff = releaseCutoffDate();
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
 	const url = new URL(`https://api.themoviedb.org/3/${path}`);
 	url.search = new URLSearchParams({
 		api_key: key,
-		language: config.tmdbLanguage,
+		language,
 		include_adult: "false",
 		page,
 		...(query ? { query } : {}),
@@ -111,10 +112,7 @@ export async function GET(request: NextRequest) {
 			);
 		}
 		const data = await response.json();
-		if (
-			config.tmdbLanguage !== "en" &&
-			needsEnglishFallback(data, config.tmdbLanguage)
-		) {
+		if (language !== "en" && needsEnglishFallback(data, language)) {
 			try {
 				const englishUrl = new URL(url);
 				englishUrl.searchParams.set("language", "en");
@@ -123,11 +121,7 @@ export async function GET(request: NextRequest) {
 					signal: AbortSignal.timeout(10000),
 				});
 				if (englishResponse.ok)
-					applyEnglishFallback(
-						data,
-						await englishResponse.json(),
-						config.tmdbLanguage,
-					);
+					applyEnglishFallback(data, await englishResponse.json(), language);
 			} catch {
 				/* Keep localized metadata available when English enrichment fails. */
 			}

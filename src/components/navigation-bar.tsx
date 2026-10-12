@@ -4,6 +4,7 @@ import { Activity, ArrowLeft, Compass, Menu, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { LanguageSelector, useLanguage } from "@/components/language-provider";
 import { InstallButton } from "./install-button";
 import { Logo } from "./logo";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "./ui/sheet";
@@ -17,13 +18,14 @@ const iconClass =
 	"inline-flex size-10 items-center justify-center rounded-md transition hover:bg-accent hover:text-accent-foreground";
 
 export function NavigationBar() {
+	const { t } = useLanguage();
 	const pathname = usePathname();
 	const router = useRouter();
 	const [open, setOpen] = useState(false);
 	return (
 		<nav
 			className="sticky top-0 z-40 shrink-0 bg-card border-b"
-			aria-label="Main navigation"
+			aria-label={t("Main navigation")}
 		>
 			<div className="container mx-auto flex items-center justify-between gap-3 px-4 py-4 sm:px-6">
 				<div className="flex min-w-0 items-center gap-3">
@@ -34,8 +36,8 @@ export function NavigationBar() {
 								if (window.history.length > 1) router.back();
 								else router.replace("/");
 							}}
-							aria-label="Go back"
-							title="Go back"
+							aria-label={t("Go back")}
+							title={t("Go back")}
 							className={`${iconClass} shrink-0`}
 						>
 							<ArrowLeft className="size-5" />
@@ -48,23 +50,24 @@ export function NavigationBar() {
 						<Link
 							key={href}
 							href={href}
-							aria-label={label}
-							title={label}
+							aria-label={t(label)}
+							title={t(label)}
 							aria-current={pathname === href ? "page" : undefined}
 							className={iconClass}
 						>
 							<Icon className="size-4" />
 						</Link>
 					))}
+					<LanguageSelector />
 					<InstallButton />
 				</div>
 				<div className="sm:hidden">
 					<Sheet open={open} onOpenChange={setOpen}>
-						<SheetTrigger aria-label="Open menu" className={iconClass}>
+						<SheetTrigger aria-label={t("Open menu")} className={iconClass}>
 							<Menu className="size-5" />
 						</SheetTrigger>
 						<SheetContent>
-							<SheetTitle className="sr-only">Navigation</SheetTitle>
+							<SheetTitle className="sr-only">{t("Navigation")}</SheetTitle>
 							<div className="flex flex-col gap-2 px-4 pt-16">
 								{links.map(({ href, label, icon: Icon }) => (
 									<Link
@@ -75,9 +78,10 @@ export function NavigationBar() {
 										className="flex min-h-11 items-center gap-3 rounded-md px-3 hover:bg-accent aria-[current=page]:bg-accent"
 									>
 										<Icon className="size-4" />
-										{label}
+										{t(label)}
 									</Link>
 								))}
+								<LanguageSelector showLabel />
 								<div className="pt-2">
 									<InstallButton fullWidth />
 								</div>

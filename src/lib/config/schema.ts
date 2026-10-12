@@ -73,7 +73,6 @@ export interface RuntimeConfig {
 		providerOrder: ProviderId[];
 	};
 	tmdbApiKey: string;
-	tmdbLanguage: string;
 	opensubtitles: {
 		apiKey: string;
 		username: string;
@@ -107,7 +106,6 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 			providerOrder: [...providerIds],
 		},
 		tmdbApiKey: "",
-		tmdbLanguage: "en",
 		opensubtitles: {
 			apiKey: "",
 			username: "",
@@ -330,9 +328,6 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 			providerOrder,
 		},
 		tmdbApiKey: string(root.tmdbApiKey, "").trim(),
-		tmdbLanguage: isLanguage(root.tmdbLanguage)
-			? root.tmdbLanguage
-			: defaults.tmdbLanguage,
 		opensubtitles: {
 			apiKey: string(opensubtitles.apiKey, "").trim(),
 			username: string(opensubtitles.username, "").trim(),

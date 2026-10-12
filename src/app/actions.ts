@@ -104,17 +104,22 @@ export async function getTorrents(): Promise<TorrentStats> {
 	};
 }
 
-export async function getPlaybackStats(uri: string) {
+export async function getPlaybackStats(uri: string, fileIndex: number) {
+	if (!Number.isInteger(fileIndex) || fileIndex < 0) return null;
 	const request = parseTorrentRequest(decryptText(uri));
 	const torrent =
 		getTorrentByUri(request.uri) ?? (await getTorrentClient().get(request.uri));
 	if (!torrent || torrent.destroyed) return null;
+	const file = torrent.files[fileIndex];
 	return {
 		ready: torrent.ready,
 		peers: torrent.numPeers,
 		download: getReadableSize(torrent.downloadSpeed),
 		upload: getReadableSize(torrent.uploadSpeed),
-		downloaded: getReadableSize(torrent.downloaded),
+		downloaded:
+			getRuntimeConfig().config.storage.mode === "file"
+				? getReadableSize(file?.downloaded ?? 0)
+				: null,
 	};
 }
 

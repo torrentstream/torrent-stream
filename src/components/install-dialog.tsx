@@ -3,6 +3,7 @@
 import { Check, Copy, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -49,6 +50,7 @@ export function InstallDialog({
 	protocol: string;
 	host: string;
 }) {
+	const { t } = useLanguage();
 	const [authMethod, setAuthMethod] = useState<StremioAuthMethod>("key");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
@@ -266,12 +268,14 @@ export function InstallDialog({
 			>
 				<DialogHeader>
 					<DialogTitle className="pr-10 leading-snug">
-						Install Stremio Addon
+						{t("Install Stremio Addon")}
 					</DialogTitle>
 					<DialogDescription>
 						{https
-							? "Press the button below to install the addon to Stremio."
-							: "Please authenticate with Stremio. Your credentials will be sent directly to Stremio's API from your browser. Nothing is stored on the server."}
+							? t("Press the button below to install the addon to Stremio.")
+							: t(
+									"Please authenticate with Stremio. Your credentials will be sent directly to Stremio's API from your browser. Nothing is stored on the server.",
+								)}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -283,24 +287,24 @@ export function InstallDialog({
 								className="flex-1"
 								onClick={() => setAuthMethod("key")}
 							>
-								Auth Key
+								{t("Auth Key")}
 							</Button>
 							<Button
 								variant={authMethod === "credentials" ? "default" : "outline"}
 								className="flex-1"
 								onClick={() => setAuthMethod("credentials")}
 							>
-								Email & Password
+								{t("Email & Password")}
 							</Button>
 						</div>
 
 						{authMethod === "key" && (
 							<Field>
-								<Label htmlFor="authKey">Stremio Auth Key</Label>
+								<Label htmlFor="authKey">{t("Stremio Auth Key")}</Label>
 								<Input
 									id="authKey"
 									type="password"
-									placeholder="Enter your Stremio auth key"
+									placeholder={t("Enter your Stremio auth key")}
 									value={authKey}
 									onChange={(e) => setAuthKey(e.target.value)}
 									disabled={loading}
@@ -318,22 +322,22 @@ export function InstallDialog({
 						{authMethod === "credentials" && (
 							<>
 								<Field>
-									<Label htmlFor="email">Stremio Email</Label>
+									<Label htmlFor="email">{t("Stremio Email")}</Label>
 									<Input
 										id="email"
 										type="email"
-										placeholder="Enter your Stremio email"
+										placeholder={t("Enter your Stremio email")}
 										value={email}
 										onChange={(e) => setEmail(e.target.value)}
 										disabled={loading}
 									/>
 								</Field>
 								<Field>
-									<Label htmlFor="password">Stremio Password</Label>
+									<Label htmlFor="password">{t("Stremio Password")}</Label>
 									<Input
 										id="password"
 										type="password"
-										placeholder="Enter your Stremio password"
+										placeholder={t("Enter your Stremio password")}
 										value={password}
 										onChange={(e) => setPassword(e.target.value)}
 										disabled={loading}
@@ -344,7 +348,7 @@ export function InstallDialog({
 					</>
 				)}
 
-				{error && <FieldError>{error}</FieldError>}
+				{error && <FieldError>{t(error)}</FieldError>}
 
 				<DialogFooter className="flex-col sm:flex-col">
 					{https ? (
@@ -353,7 +357,7 @@ export function InstallDialog({
 							render={<Link href={`stremio://${host}/api/manifest.json`} />}
 							className="w-full text-white transition-all bg-[#5a4cad] hover:bg-[#695dac]"
 						>
-							Install Addon
+							{t("Install Addon")}
 						</Button>
 					) : (
 						<Button
@@ -364,12 +368,12 @@ export function InstallDialog({
 							{loading ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Installing Addon...
+									{t("Installing Addon...")}
 								</>
 							) : success ? (
 								<>
 									<Check className="mr-2 h-4 w-4" />
-									Installed Addon Successfully!
+									{t("Installed Addon Successfully!")}
 								</>
 							) : (
 								"Install Addon"
@@ -385,12 +389,12 @@ export function InstallDialog({
 						{copied ? (
 							<>
 								<Check className="mr-2 h-4 w-4" />
-								Copied Manifest URL!
+								{t("Copied Manifest URL!")}
 							</>
 						) : (
 							<>
 								<Copy className="mr-2 h-4 w-4" />
-								Copy Manifest URL
+								{t("Copy Manifest URL")}
 							</>
 						)}
 					</Button>

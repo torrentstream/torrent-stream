@@ -1,6 +1,7 @@
 "use client";
 import { Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useLanguage } from "@/components/language-provider";
 
 export function BrowseSearch({
 	query,
@@ -9,6 +10,7 @@ export function BrowseSearch({
 	query: string;
 	onSearch: (query: string) => void;
 }) {
+	const { t } = useLanguage();
 	const [value, setValue] = useState(query);
 	useEffect(() => setValue(query), [query]);
 	return (
@@ -20,8 +22,8 @@ export function BrowseSearch({
 			className="flex w-full min-w-0 items-center gap-1 rounded-full border bg-card p-1 pl-4 focus-within:ring-2 focus-within:ring-ring xl:w-auto xl:flex-1"
 		>
 			<input
-				aria-label="Search movies and shows"
-				placeholder="Search movies & shows"
+				aria-label={t("Search movies and shows")}
+				placeholder={t("Search movies & shows")}
 				value={value}
 				onChange={(e) => setValue(e.target.value)}
 				maxLength={200}
@@ -30,7 +32,7 @@ export function BrowseSearch({
 			{value && (
 				<button
 					type="button"
-					aria-label="Clear search"
+					aria-label={t("Clear search")}
 					onClick={() => {
 						setValue("");
 						onSearch("");
@@ -42,7 +44,7 @@ export function BrowseSearch({
 			)}
 			<button
 				type="submit"
-				aria-label="Search"
+				aria-label={t("Search")}
 				className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary hover:bg-accent"
 			>
 				<Search className="size-4" />

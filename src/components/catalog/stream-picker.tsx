@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import type { StremioStream } from "@/lib/search/stremio";
 import { LoadError, Loading } from "./load-state";
@@ -27,12 +28,15 @@ export function StreamPicker({
 	retry: () => void;
 	title: string;
 }) {
+	const { t } = useLanguage();
 	const [selected, setSelected] = useState<StremioStream | null>(null);
 	const streams = data?.streams.filter((stream) => stream.url) || [];
 	if (!imdbId)
 		return (
 			<p className="rounded-xl border p-6 text-muted-foreground">
-				This title has no IMDb reference yet, so streams cannot be searched.
+				{t(
+					"This title has no IMDb reference yet, so streams cannot be searched.",
+				)}
 			</p>
 		);
 	return (
@@ -45,7 +49,7 @@ export function StreamPicker({
 				/>
 			)}
 			<div className="flex min-h-10 items-center gap-3">
-				<h2 className="text-xl font-semibold">Streams</h2>
+				<h2 className="text-xl font-semibold">{t("Streams")}</h2>
 				{data && <Badge variant="secondary">{streams.length}</Badge>}
 			</div>
 			{data?.subtitleError && (
@@ -56,19 +60,20 @@ export function StreamPicker({
 			{error ? (
 				<LoadError error={error} retry={retry} />
 			) : !data ? (
-				<Loading>Searching your providers…</Loading>
+				<Loading>{t("Searching your providers…")}</Loading>
 			) : !streams.length ? (
 				<div className="rounded-xl border bg-card p-8 text-center">
-					<h2 className="font-medium">No streams found</h2>
+					<h2 className="font-medium">{t("No streams found")}</h2>
 					<p className="mt-2 text-sm text-muted-foreground">
-						Try again later, or check your enabled providers and language
-						filters.
+						{t(
+							"Try again later, or check your enabled providers and language filters.",
+						)}
 					</p>
 					<Link
 						href="/config"
 						className="mt-4 inline-block text-sm underline underline-offset-4"
 					>
-						Open settings
+						{t("Open settings")}
 					</Link>
 				</div>
 			) : (
@@ -91,7 +96,7 @@ export function StreamPicker({
 									<span className="min-w-0 flex-1">
 										<span className="mb-2 flex flex-wrap gap-2">
 											<Badge variant="secondary">
-												{stream.name || "Unknown quality"}
+												{stream.name || t("Unknown quality")}
 											</Badge>
 										</span>
 										<span className="block break-words text-sm font-bold [overflow-wrap:anywhere] sm:text-base">
@@ -128,6 +133,7 @@ function PlayerOverlay({
 	title: string;
 	onClose: () => void;
 }) {
+	const { t } = useLanguage();
 	const dialogRef = useRef<HTMLDialogElement>(null);
 	useEffect(() => {
 		const dialog = dialogRef.current;
@@ -145,7 +151,7 @@ function PlayerOverlay({
 	return createPortal(
 		<dialog
 			ref={dialogRef}
-			aria-label={`Playing ${title}`}
+			aria-label={t("Playing {title}", { title })}
 			onCancel={(event) => {
 				event.preventDefault();
 				onClose();

@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
+import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
 import {
 	type CatalogResults,
@@ -26,6 +27,7 @@ import { FilterSelect } from "./filter-select";
 import { LoadError, Loading } from "./load-state";
 
 export function MediaBrowser() {
+	const { t, language } = useLanguage();
 	const params = useSearchParams();
 	const query = params.get("q") || "";
 	const type = ["movie", "tv"].includes(params.get("type") || "")
@@ -36,11 +38,14 @@ export function MediaBrowser() {
 	const sort = type === "all" ? "trending" : params.get("sort") || "trending";
 	const discovery = !query && type !== "all" && sort !== "trending";
 	const { data: genres } = useSWR<{ genres: { id: number; name: string }[] }>(
-		type !== "all" ? `/api/catalog?type=${type}&genres=1` : null,
+		type !== "all"
+			? `/api/catalog?type=${type}&genres=1&language=${language}`
+			: null,
 		fetchCatalog,
 	);
 	const filters = new URLSearchParams({
 		type,
+		language,
 		q: query,
 		...(!query ? { sort, ...(discovery ? { genre, year } : {}) } : {}),
 	}).toString();
@@ -59,17 +64,19 @@ export function MediaBrowser() {
 				<div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:flex xl:w-auto xl:shrink-0">
 					<FilterSelect
 						icon={Tags}
-						aria-label="Genre"
+						aria-label={t("Genre")}
 						disabled={!discovery}
 						title={
 							!discovery
-								? "Choose Movies or TV shows and a non-trending sort to filter by genre or year."
+								? t(
+										"Choose Movies or TV shows and a non-trending sort to filter by genre or year.",
+									)
 								: undefined
 						}
 						value={discovery ? genre : ""}
 						onChange={(e) => navigate({ genre: e.target.value })}
 					>
-						<option value="">All genres</option>
+						<option value="">{t("All genres")}</option>
 						{genres?.genres.map((g) => (
 							<option key={g.id} value={g.id}>
 								{g.name}
@@ -78,17 +85,19 @@ export function MediaBrowser() {
 					</FilterSelect>
 					<FilterSelect
 						icon={Calendar}
-						aria-label="Year"
+						aria-label={t("Year")}
 						disabled={!discovery}
 						title={
 							!discovery
-								? "Choose Movies or TV shows and a non-trending sort to filter by genre or year."
+								? t(
+										"Choose Movies or TV shows and a non-trending sort to filter by genre or year.",
+									)
 								: undefined
 						}
 						value={discovery ? year : ""}
 						onChange={(e) => navigate({ year: e.target.value })}
 					>
-						<option value="">All years</option>
+						<option value="">{t("All years")}</option>
 						{Array.from(
 							{ length: new Date().getFullYear() - 1899 },
 							(_, i) => new Date().getFullYear() - i,
@@ -100,7 +109,7 @@ export function MediaBrowser() {
 					</FilterSelect>
 					<FilterSelect
 						icon={Layers}
-						aria-label="Type"
+						aria-label={t("Type")}
 						value={type}
 						onChange={(e) =>
 							navigate({
@@ -112,13 +121,13 @@ export function MediaBrowser() {
 							})
 						}
 					>
-						<option value="all">All titles</option>
-						<option value="movie">Movies</option>
-						<option value="tv">TV shows</option>
+						<option value="all">{t("All titles")}</option>
+						<option value="movie">{t("Movies")}</option>
+						<option value="tv">{t("TV shows")}</option>
 					</FilterSelect>
 					<FilterSelect
 						icon={ArrowDownWideNarrow}
-						aria-label="Sort"
+						aria-label={t("Sort")}
 						disabled={!!query}
 						value={query ? "relevance" : sort}
 						onChange={(e) =>
@@ -130,19 +139,19 @@ export function MediaBrowser() {
 							})
 						}
 					>
-						{query && <option value="relevance">Relevance</option>}
-						<option value="trending">Trending</option>
+						{query && <option value="relevance">{t("Relevance")}</option>}
+						<option value="trending">{t("Trending")}</option>
 						<option disabled={type === "all"} value="popular">
-							Popular
+							{t("Popular")}
 						</option>
 						<option disabled={type === "all"} value="rating">
-							Top rated
+							{t("Top rated")}
 						</option>
 						<option disabled={type === "all"} value="newest">
-							Newest
+							{t("Newest")}
 						</option>
 						<option disabled={type === "all"} value="oldest">
-							Oldest
+							{t("Oldest")}
 						</option>
 					</FilterSelect>
 				</div>
@@ -153,6 +162,7 @@ export function MediaBrowser() {
 }
 
 function TitleGrid({ filters }: { filters: string }) {
+	const { t } = useLanguage();
 	const gridRef = useRef<HTMLDivElement>(null);
 	const sentinelRef = useRef<HTMLDivElement>(null);
 	const [columns, setColumns] = useState(2);
@@ -242,7 +252,9 @@ function TitleGrid({ filters }: { filters: string }) {
 								<Badge
 									variant="secondary"
 									className="absolute bottom-2 right-2 bg-black/75 text-white"
-									aria-label={`Rating ${title.vote_average.toFixed(1)} out of 10`}
+									aria-label={t("Rating {rating} out of 10", {
+										rating: title.vote_average.toFixed(1),
+									})}
 								>
 									<Star className="size-3 fill-amber-300 text-amber-300" />
 									{title.vote_average.toFixed(1)}
@@ -253,8 +265,8 @@ function TitleGrid({ filters }: { filters: string }) {
 							{titleName(title)}
 						</h2>
 						<p className="mt-1 text-xs text-muted-foreground">
-							{titleYear(title) || "Coming soon"} ·{" "}
-							{title.media_type === "tv" ? "TV show" : "Movie"}
+							{titleYear(title) || t("Coming soon")} ·{" "}
+							{title.media_type === "tv" ? t("TV show") : t("Movie")}
 						</p>
 					</Link>
 				))}
@@ -262,14 +274,14 @@ function TitleGrid({ filters }: { filters: string }) {
 			{!loading && !error && !titles.length && (
 				<div className="py-20 text-center">
 					<Film className="mx-auto mb-4 size-9 text-muted-foreground" />
-					<h2 className="text-xl font-medium">No titles found</h2>
+					<h2 className="text-xl font-medium">{t("No titles found")}</h2>
 					<p className="mt-2 text-muted-foreground">
-						Try another title or a different category.
+						{t("Try another title or a different category.")}
 					</p>
 				</div>
 			)}
 			<div ref={sentinelRef} className="absolute bottom-0 h-px" />
-			{loading && <Loading>Loading titles…</Loading>}
+			{loading && <Loading>{t("Loading titles…")}</Loading>}
 			{error && <LoadError error={error} retry={() => mutate()} />}
 		</div>
 	);
