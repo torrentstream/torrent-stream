@@ -10,6 +10,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { useSWRConfig } from "swr";
 import { type SaveConfigurationResult, saveConfiguration } from "@/app/actions";
 import type {
 	ProviderId,
@@ -60,6 +61,7 @@ function moveItem<T>(items: T[], moved: T, target: T) {
 }
 
 export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
+	const { cache, mutate } = useSWRConfig();
 	const [saved, setSaved] = useState(initialSnapshot);
 	const [draft, setDraft] = useState(() => cloneConfig(initialSnapshot.config));
 	const [saving, setSaving] = useState(false);
@@ -101,6 +103,13 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 				revision: result.revision,
 				providerOptions: saved.providerOptions,
 			};
+			if (result.config.tmdbLanguage !== saved.config.tmdbLanguage) {
+				await Promise.all(
+					[...cache.keys()]
+						.filter((key) => key.includes("/api/catalog?"))
+						.map((key) => mutate(key, undefined, { revalidate: false })),
+				);
+			}
 			setSaved(snapshot);
 			setDraft(cloneConfig(result.config));
 			setConfirmation(undefined);
@@ -138,6 +147,8 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 				</div>
 			)}
 
+			<MetadataCard config={draft} update={update} />
+			<SubtitlesCard config={draft} update={update} />
 			<StorageCard config={draft} update={update} />
 			<TorrentCard config={draft} update={update} />
 			<SearchCard config={draft} update={update} />
@@ -146,7 +157,6 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 				providerOptions={saved.providerOptions}
 				update={update}
 			/>
-			<ApiKeysCard config={draft} update={update} />
 
 			<div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 py-3 backdrop-blur">
 				<div className="container mx-auto flex items-center justify-between gap-3 px-4 sm:px-6">
@@ -433,7 +443,7 @@ function SearchCard({
 	];
 
 	return (
-		<Section title="Search filters">
+		<Section title="Torrent search">
 			<div>
 				<div className="mb-2 flex items-center justify-between">
 					<Label>Formats</Label>
@@ -912,7 +922,7 @@ function PrivateProvider({
 	);
 }
 
-function ApiKeysCard({
+function MetadataCard({
 	config,
 	update,
 }: {
@@ -920,7 +930,7 @@ function ApiKeysCard({
 	update: (recipe: (next: RuntimeConfig) => void) => void;
 }) {
 	return (
-		<Section title="API keys">
+		<Section title="Catalog">
 			<div className="space-y-2">
 				<PasswordField
 					id="tmdb-api-key"
@@ -935,9 +945,42 @@ function ApiKeysCard({
 				/>
 				<p className="text-xs leading-relaxed text-muted-foreground">
 					Used for movie and TV metadata. Leave empty to use the default key.
+					Get an API key from your{" "}
+					<a
+						className="underline underline-offset-4"
+						href="https://www.themoviedb.org/settings/api"
+						target="_blank"
+						rel="noreferrer"
+					>
+						TMDB account
+					</a>
+					.
 				</p>
 			</div>
-			<div className="border-t" />
+			<LanguageSelection
+				selected={[config.tmdbLanguage]}
+				onSelect={(language) =>
+					update((next) => {
+						next.tmdbLanguage = language;
+					})
+				}
+			/>
+			<p className="text-xs leading-relaxed text-muted-foreground">
+				Missing metadata text falls back to English.
+			</p>
+		</Section>
+	);
+}
+
+function SubtitlesCard({
+	config,
+	update,
+}: {
+	config: RuntimeConfig;
+	update: (recipe: (next: RuntimeConfig) => void) => void;
+}) {
+	return (
+		<Section title="Subtitles">
 			<div className="space-y-2">
 				<PasswordField
 					id="opensubtitles-api-key"
@@ -951,7 +994,8 @@ function ApiKeysCard({
 					}
 				/>
 				<p className="text-xs leading-relaxed text-muted-foreground">
-					Get an API key from your{" "}
+					Used for subtitle search. Leave empty to use the default key. Get an
+					API key from your{" "}
 					<a
 						className="underline underline-offset-4"
 						href="https://www.opensubtitles.com/consumers"
@@ -960,8 +1004,7 @@ function ApiKeysCard({
 					>
 						OpenSubtitles account
 					</a>
-					. Leave it empty to disable. Subtitles use your search languages and
-					download only when selected.
+					.
 				</p>
 			</div>
 			<div className="space-y-2">
@@ -995,7 +1038,57 @@ function ApiKeysCard({
 					OpenSubtitles applies its anonymous download limit.
 				</p>
 			</div>
+			<LanguageSelection
+				selected={config.opensubtitles.languages}
+				multiple
+				onSelect={(language) =>
+					update((next) => {
+						next.opensubtitles.languages =
+							next.opensubtitles.languages.includes(language)
+								? next.opensubtitles.languages.filter(
+										(code) => code !== language,
+									)
+								: [...next.opensubtitles.languages, language];
+					})
+				}
+			/>
+			<p className="text-xs leading-relaxed text-muted-foreground">
+				Choose subtitle languages. With none selected, subtitle search is
+				disabled.
+			</p>
 		</Section>
+	);
+}
+
+function LanguageSelection({
+	selected,
+	multiple = false,
+	onSelect,
+}: {
+	selected: string[];
+	multiple?: boolean;
+	onSelect: (language: string) => void;
+}) {
+	return (
+		<fieldset className="space-y-2">
+			<legend className="text-sm font-medium">
+				{multiple ? "Languages" : "Language"}
+			</legend>
+			<div className="flex flex-wrap gap-2">
+				{[
+					...supportedLanguages.filter(({ code }) => code === "hu"),
+					...supportedLanguages.filter(({ code }) => code !== "hu"),
+				].map((language) => (
+					<Chip
+						key={language.code}
+						selected={selected.includes(language.code)}
+						onClick={() => onSelect(language.code)}
+					>
+						{language.flag} {language.name}
+					</Chip>
+				))}
+			</div>
+		</fieldset>
 	);
 }
 

@@ -7,6 +7,10 @@ import {
 	releaseCutoffDate,
 	type TitleDetails,
 } from "@/lib/media/catalog";
+import {
+	applyEnglishFallback,
+	needsEnglishFallback,
+} from "@/lib/media/metadata-language";
 import { resolveSeriesStreamReference } from "@/lib/media/stream-reference";
 
 // Used when no personal API key is saved in Settings.
@@ -46,7 +50,8 @@ export async function GET(request: NextRequest) {
 		);
 	}
 
-	const key = getRuntimeConfig().config.tmdbApiKey || DEFAULT_TMDB_API_KEY;
+	const config = getRuntimeConfig().config;
+	const key = config.tmdbApiKey || DEFAULT_TMDB_API_KEY;
 
 	const cutoff = releaseCutoffDate();
 	const path = genres
@@ -61,7 +66,7 @@ export async function GET(request: NextRequest) {
 	const url = new URL(`https://api.themoviedb.org/3/${path}`);
 	url.search = new URLSearchParams({
 		api_key: key,
-		language: "en-US",
+		language: config.tmdbLanguage,
 		include_adult: "false",
 		page,
 		...(query ? { query } : {}),
@@ -106,6 +111,27 @@ export async function GET(request: NextRequest) {
 			);
 		}
 		const data = await response.json();
+		if (
+			config.tmdbLanguage !== "en" &&
+			needsEnglishFallback(data, config.tmdbLanguage)
+		) {
+			try {
+				const englishUrl = new URL(url);
+				englishUrl.searchParams.set("language", "en");
+				const englishResponse = await fetch(englishUrl, {
+					next: { revalidate: 900 },
+					signal: AbortSignal.timeout(10000),
+				});
+				if (englishResponse.ok)
+					applyEnglishFallback(
+						data,
+						await englishResponse.json(),
+						config.tmdbLanguage,
+					);
+			} catch {
+				/* Keep localized metadata available when English enrichment fails. */
+			}
+		}
 		if (genres) return NextResponse.json(data);
 		if (id) {
 			if (season === null) {

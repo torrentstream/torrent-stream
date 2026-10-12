@@ -3,6 +3,8 @@ import { getRuntimeConfig } from "@/lib/config/runtime";
 import type { StremioStream } from "@/lib/search/stremio";
 
 const API = "https://api.opensubtitles.com/api/v1";
+// Used when no personal API key is saved in Settings.
+const DEFAULT_OPENSUBTITLES_API_KEY = "nib1Vl01DVxNrLx5WxaF8WqfKiRA81vG";
 type Credentials = { apiKey: string; username: string; password: string };
 class SubtitleError extends Error {
 	constructor(
@@ -17,7 +19,8 @@ let session:
 	| undefined;
 const downloads = new Map<string, { expires: number; text: Promise<string> }>();
 function credentials() {
-	return getRuntimeConfig().config.opensubtitles;
+	const config = getRuntimeConfig().config.opensubtitles;
+	return { ...config, apiKey: config.apiKey || DEFAULT_OPENSUBTITLES_API_KEY };
 }
 function credentialKey(config: Credentials) {
 	return createHash("sha256").update(JSON.stringify(config)).digest("hex");
@@ -93,7 +96,7 @@ export async function searchOpenSubtitles(
 	error?: string;
 }> {
 	const config = credentials();
-	if (!config.apiKey) return { subtitles: [] };
+	if (!config.apiKey || !config.languages.length) return { subtitles: [] };
 	const params = new URLSearchParams({
 		...(episode !== undefined
 			? {
@@ -106,8 +109,7 @@ export async function searchOpenSubtitles(
 		order_by: "download_count",
 		order_direction: "desc",
 	});
-	const languages = getRuntimeConfig().config.search.languages;
-	if (languages.length) params.set("languages", languages.join(","));
+	params.set("languages", config.languages.join(","));
 	params.sort();
 	try {
 		const result = await request<SearchResult>(config, `subtitles?${params}`);

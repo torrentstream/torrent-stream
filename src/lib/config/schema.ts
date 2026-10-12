@@ -73,7 +73,13 @@ export interface RuntimeConfig {
 		providerOrder: ProviderId[];
 	};
 	tmdbApiKey: string;
-	opensubtitles: { apiKey: string; username: string; password: string };
+	tmdbLanguage: string;
+	opensubtitles: {
+		apiKey: string;
+		username: string;
+		password: string;
+		languages: string[];
+	};
 	providers: RuntimeProviders;
 }
 
@@ -101,7 +107,13 @@ export function createDefaultRuntimeConfig(): RuntimeConfig {
 			providerOrder: [...providerIds],
 		},
 		tmdbApiKey: "",
-		opensubtitles: { apiKey: "", username: "", password: "" },
+		tmdbLanguage: "en",
+		opensubtitles: {
+			apiKey: "",
+			username: "",
+			password: "",
+			languages: ["en", "hu"],
+		},
 		providers: {
 			ncore: {
 				enabled: false,
@@ -218,6 +230,14 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 		)
 			? [...defaults.search.languages]
 			: [...new Set(languages)];
+	const isLanguage = (value: unknown): value is string =>
+		typeof value === "string" &&
+		supportedLanguages.some(({ code }) => code === value);
+	const subtitleLanguages = opensubtitles.languages;
+	const parsedSubtitleLanguages =
+		Array.isArray(subtitleLanguages) && subtitleLanguages.every(isLanguage)
+			? [...new Set(subtitleLanguages)]
+			: [...defaults.opensubtitles.languages];
 	const sortPriority = parseOrder(
 		search.sortPriority,
 		searchSortCriteria,
@@ -310,10 +330,14 @@ export function parseRuntimeConfig(value: unknown): RuntimeConfig {
 			providerOrder,
 		},
 		tmdbApiKey: string(root.tmdbApiKey, "").trim(),
+		tmdbLanguage: isLanguage(root.tmdbLanguage)
+			? root.tmdbLanguage
+			: defaults.tmdbLanguage,
 		opensubtitles: {
 			apiKey: string(opensubtitles.apiKey, "").trim(),
 			username: string(opensubtitles.username, "").trim(),
 			password: string(opensubtitles.password, ""),
+			languages: parsedSubtitleLanguages,
 		},
 		providers: {
 			ncore: {
