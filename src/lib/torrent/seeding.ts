@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { Torrent } from "webtorrent";
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import {
 	isProviderEnabled,
@@ -7,6 +8,10 @@ import {
 import { logger } from "@/lib/logging/logger";
 import type { TorrentSearchProvider } from "@/lib/search/provider";
 import { providers } from "@/lib/search/provider-registry";
+import {
+	recordSeedCheck,
+	recordSeedCheckFailure,
+} from "@/lib/search/provider-status";
 import { getTorrentClient } from "./clients";
 import {
 	dropSeedRecord,
@@ -28,47 +33,84 @@ declare global {
 
 const seedRequirementCheckInterval = 60 * 60 * 1000;
 const seedRequirementGracePeriod = 8 * 60 * 60 * 1000;
+// Checks also run on every configuration change, so the confirming check must
+// be a later scheduled one rather than simply the next one.
+const seedRequirementConfirmationDelay = seedRequirementCheckInterval / 2;
+
+// Tracker pages truncate long titles, so a name that is a prefix of the other
+// counts as the same torrent once it is long enough to be distinctive.
+const minimumPrefixMatchLength = 12;
 
 function normalizeTorrentName(name: string) {
-	return name.trim().toLocaleLowerCase();
+	return name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function isSameTorrentName(a: string, b: string) {
+	if (a === b) return true;
+	const [shorter, longer] = a.length < b.length ? [a, b] : [b, a];
+	return (
+		shorter.length >= minimumPrefixMatchLength && longer.startsWith(shorter)
+	);
 }
 
 async function checkProviderSeedRequirements(provider: TorrentSearchProvider) {
-	let requiredNames: Set<string>;
+	let requiredNames: string[];
 	try {
-		requiredNames = new Set(
-			(await provider.getSeedRequirements())
-				.map(normalizeTorrentName)
-				.filter((name) => name.length > 0),
-		);
+		requiredNames = [
+			...new Set(
+				(await provider.getSeedRequirements())
+					.map(normalizeTorrentName)
+					.filter((name) => name.length > 0),
+			),
+		];
 	} catch (error) {
 		logger.error(error);
+		recordSeedCheckFailure(provider.id, error);
 		return;
 	}
 	if (!shouldCheckSeedRequirements(provider)) return;
 
+	// An empty list is a real answer: providers throw when the page they got
+	// is not the tracker's list (layout change, maintenance page, bot
+	// challenge), and removal still needs a second, confirming check.
+
 	const now = Date.now();
-	const torrents = getTorrentClient().torrents.filter((torrent) => {
+	const removable: Torrent[] = [];
+	for (const torrent of getTorrentClient().torrents) {
 		const data = getTorrentData(torrent);
 		const seedRecord = seedRecords[torrent.infoHash];
-		return (
-			data?.provider === provider.id &&
-			Boolean(data.seed) &&
-			seedRecord !== undefined &&
+		if (data?.provider !== provider.id || !data.seed || !seedRecord) continue;
+
+		const name = normalizeTorrentName(torrent.name);
+		const unrequired =
 			now - seedRecord.addedAt >= seedRequirementGracePeriod &&
 			data.streams.size === 0 &&
-			!requiredNames.has(normalizeTorrentName(torrent.name))
-		);
-	});
+			!requiredNames.some((required) => isSameTorrentName(required, name));
+		if (!unrequired) {
+			data.unrequiredSince = undefined;
+			continue;
+		}
+		// Removal needs a second check to confirm that the torrent is still not
+		// listed, in case the tracker served an incomplete page.
+		data.unrequiredSince ??= now;
+		if (now - data.unrequiredSince >= seedRequirementConfirmationDelay) {
+			removable.push(torrent);
+		}
+	}
 
 	await Promise.all(
-		torrents.map(async (torrent) => {
+		removable.map(async (torrent) => {
 			logger.debug(
 				`Tracker no longer requires seeding, removing torrent: ${torrent.name} (${torrent.infoHash})`,
 			);
 			await destroyTorrentInternal(torrent);
 		}),
 	);
+	recordSeedCheck(provider.id, {
+		outcome: "checked",
+		required: requiredNames.length,
+		removed: removable.length,
+	});
 }
 
 function shouldCheckSeedRequirements(provider: TorrentSearchProvider) {

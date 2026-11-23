@@ -3,6 +3,10 @@ import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 import { isImdbId } from "@/lib/media/imdb";
 import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import {
+	recordSearchFailure,
+	recordSearchSuccess,
+} from "@/lib/search/provider-status";
 import { TorrentSearchResult } from "@/lib/search/result";
 
 const movieCategories = "2000,2030,2040";
@@ -18,7 +22,8 @@ interface TorznabRelease {
 	name: string;
 	tracker: string;
 	size: number;
-	seeds: number;
+	/** Undefined when the indexer does not report seeders. */
+	seeds?: number;
 	peers: number;
 	magnet?: string;
 	torrent?: string;
@@ -59,18 +64,28 @@ export class TorznabProvider extends TorrentSearchProvider {
 		const feeds = getRuntimeConfig().config.providers.torznab.feeds.filter(
 			(feed) => feed.url.trim(),
 		);
+		if (feeds.length === 0) return [];
+
+		const errors: unknown[] = [];
 		const results = await Promise.all(
 			feeds.map(async (feed) => {
 				try {
 					return await this.searchFeed(feed, params, imdb, season, episode);
 				} catch (error) {
 					logger.error(error);
+					errors.push(error);
 					return [];
 				}
 			}),
 		);
+		const torrents = results.flat();
 
-		return results.flat();
+		// The search only failed when no feed answered; the results of the
+		// working feeds are still used.
+		if (errors.length === feeds.length) recordSearchFailure(this.id, errors[0]);
+		else recordSearchSuccess(this.id, torrents.length);
+
+		return torrents;
 	}
 
 	async getSeedRequirements() {
@@ -209,7 +224,9 @@ export class TorznabProvider extends TorrentSearchProvider {
 				size: this.numericValue(
 					this.firstNonEmpty(attrs.get("size"), enclosure.attr("length")),
 				),
-				seeds: this.numericValue(attrs.get("seeders")),
+				seeds: attrs.has("seeders")
+					? this.numericValue(attrs.get("seeders"))
+					: undefined,
 				peers: this.numericValue(
 					this.firstNonEmpty(attrs.get("peers"), attrs.get("leechers")),
 				),

@@ -1,8 +1,13 @@
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import {
+	recordSearchFailure,
+	recordSearchSuccess,
+} from "@/lib/search/provider-status";
 import { TorrentSearchResult } from "@/lib/search/result";
 import type { StremioStream } from "@/lib/search/stremio";
+import { parseSize } from "./shared";
 
 const torrentioTrackers = [
 	{ id: "yts", name: "YTS" },
@@ -13,9 +18,12 @@ const torrentioTrackers = [
 	{ id: "thepiratebay", name: "The Pirate Bay" },
 	{ id: "kickasstorrents", name: "KickassTorrents" },
 	{ id: "torrentgalaxy", name: "TorrentGalaxy" },
+	{ id: "uindex", name: "UIndex" },
+	{ id: "knaben", name: "Knaben" },
 	{ id: "magnetdl", name: "MagnetDL" },
 	{ id: "horriblesubs", name: "HorribleSubs" },
 	{ id: "nyaasi", name: "Nyaa.si" },
+	{ id: "animetosho", name: "AnimeTosho" },
 	{ id: "tokyotosho", name: "Tokyo Toshokan" },
 	{ id: "anidex", name: "AniDex" },
 	{ id: "nekobt", name: "nekoBT" },
@@ -112,12 +120,14 @@ export class TorrentioProvider extends TorrentSearchProvider {
 					stream.title?.split("⚙️ ")[1]?.split("\n")[0] || "Torrentio";
 				const category = stream.name.split("\n")[1] || undefined;
 
-				const size = this.parseSize(
-					stream.title?.split("💾 ")[1]?.split(" ⚙️")[0],
-				);
+				const size = parseSize(stream.title?.split("💾 ")[1]?.split(" ⚙️")[0]);
 
+				// Missing or unreadable seeders are unknown, not 0.
+				const seedsText = stream.title?.split("👤 ")[1]?.split(" 💾")[0];
 				const seeds =
-					Number(stream.title?.split("👤 ")[1]?.split(" 💾")[0]) || undefined;
+					seedsText?.trim() && Number.isFinite(Number(seedsText))
+						? Number(seedsText)
+						: undefined;
 
 				const trackers = this.getTrackers(stream.sources)
 					.map((tr) => `&tr=${encodeURIComponent(tr)}`)
@@ -142,8 +152,11 @@ export class TorrentioProvider extends TorrentSearchProvider {
 					}),
 				);
 			}
+
+			recordSearchSuccess(this.id, torrents.length);
 		} catch (error) {
 			logger.error(error);
+			recordSearchFailure(this.id, error);
 		}
 
 		return torrents;
@@ -161,25 +174,6 @@ export class TorrentioProvider extends TorrentSearchProvider {
 		return getRuntimeConfig().config.providers.torrentio.sources.filter(
 			(source) => torrentioTrackerIds.has(source),
 		);
-	}
-
-	private parseSize(size: string | undefined) {
-		if (!size) return 0;
-
-		const units = {
-			TB: 1024 ** 4,
-			GB: 1024 ** 3,
-			MB: 1024 ** 2,
-			KB: 1024,
-			B: 1,
-		};
-
-		const [sizeStr, unit] = size.split(" ");
-		const sizeNum = Number(sizeStr);
-
-		if (!sizeNum || !units[unit]) return 0;
-
-		return Math.ceil(sizeNum * units[unit]);
 	}
 
 	private isValidInfoHash(infoHash: string) {

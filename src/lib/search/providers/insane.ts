@@ -3,11 +3,16 @@ import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 import { isImdbId } from "@/lib/media/imdb";
 import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import {
+	recordSearchFailure,
+	recordSearchSuccess,
+} from "@/lib/search/provider-status";
 import { TorrentSearchResult } from "@/lib/search/result";
 import {
 	AuthenticatedSession,
 	type SessionCredentials,
 } from "@/lib/search/session";
+import { parseSeedRequirements, parseSize, requireCredentials } from "./shared";
 
 enum InsaneCategory {
 	Film_Hun_SD = 41,
@@ -54,11 +59,12 @@ export class InsaneProvider extends TorrentSearchProvider {
 		if (!response.ok) {
 			throw new Error(`iNSANE H&R request failed (${response.status})`);
 		}
-		const $ = cheerio.load(await response.text());
-
-		return $('a.torrentname, a[href*="details.php"]')
-			.map((_index, element) => $(element).attr("title") ?? $(element).text())
-			.get();
+		return parseSeedRequirements(this.name, await response.text(), {
+			// The torrent link of each row; its title holds the full name.
+			entries: 'table.hnrlist a[href*="details.php"]',
+			// The Hit'n'Run tab menu, which no other page has.
+			pageMarker: "aside.inboxmenu a.punished",
+		});
 	}
 
 	async searchTorrentsByCategory(query: string, category: TorrentCategory) {
@@ -115,6 +121,9 @@ export class InsaneProvider extends TorrentSearchProvider {
 
 				const link = `https://newinsane.info/browse.php?${params.toString()}`;
 				const torrentsPage = await this.session.fetch(link, credentials);
+				if (!torrentsPage.ok) {
+					throw new Error(`iNSANE search failed (${torrentsPage.status})`);
+				}
 				const $ = cheerio.load(await torrentsPage.text());
 
 				for (const el of $("tr.torrentrow")) {
@@ -125,7 +134,7 @@ export class InsaneProvider extends TorrentSearchProvider {
 					const category = this.parseCategory(
 						$(el).find("td.caticon > a > img").attr("title"),
 					);
-					const size = this.parseSize($(el).find("td.size").text());
+					const size = parseSize($(el).find("td.size").text());
 					const seeds = Number($(el).find("td.data > a:nth-of-type(1)").text());
 					const peers = Number($(el).find("td.data > a:nth-of-type(2)").text());
 					const torrent = $(el).find("a.downloadicon").attr("href");
@@ -151,24 +160,21 @@ export class InsaneProvider extends TorrentSearchProvider {
 
 				page++;
 			}
+
+			recordSearchSuccess(this.id, torrents.length);
 		} catch (error) {
 			logger.error(error);
+			recordSearchFailure(this.id, error);
 		}
 
 		return torrents;
 	}
 
 	private getCredentials() {
-		const { username, password } = getRuntimeConfig().config.providers.insane;
-
-		if (!username || !password) {
-			throw new Error("iNSANE credentials are not configured");
-		}
-
-		return {
-			username,
-			password,
-		};
+		return requireCredentials(
+			this.name,
+			getRuntimeConfig().config.providers.insane,
+		);
 	}
 
 	private parseCategory(category: string | undefined) {
@@ -188,20 +194,5 @@ export class InsaneProvider extends TorrentSearchProvider {
 			"Sorozat/Eng/UHD": "TV/UHD/EN",
 		};
 		return categories[category];
-	}
-
-	private parseSize(sizeStr: string) {
-		const size = sizeStr.replace(",", ".").trim();
-		let bytes = 0;
-		if (size.endsWith("TiB"))
-			bytes = (Number(size.replace("TiB", "")) || 0) * 1024 ** 4;
-		else if (size.endsWith("GiB"))
-			bytes = (Number(size.replace("GiB", "")) || 0) * 1024 ** 3;
-		else if (size.endsWith("MiB"))
-			bytes = (Number(size.replace("MiB", "")) || 0) * 1024 ** 2;
-		else if (size.endsWith("KiB"))
-			bytes = (Number(size.replace("KiB", "")) || 0) * 1024;
-		else if (size.endsWith("B")) bytes = Number(size.replace("B", "")) || 0;
-		return Math.ceil(bytes);
 	}
 }

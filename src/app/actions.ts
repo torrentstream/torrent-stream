@@ -5,6 +5,10 @@ import { parseRuntimeConfig, type RuntimeConfig } from "@/lib/config/schema";
 import { decryptText } from "@/lib/encryption";
 import { getReadableSize } from "@/lib/media/file";
 import { getProviderName, providers } from "@/lib/search/provider-registry";
+import {
+	clearProviderStatuses,
+	getProviderStatuses,
+} from "@/lib/search/provider-status";
 import { getTorrentClient } from "@/lib/torrent/clients";
 import { applyRuntimeTorrentConfig } from "@/lib/torrent/configuration";
 import { TorrentInfo } from "@/lib/torrent/info";
@@ -143,6 +147,10 @@ export async function getConfiguration() {
 	};
 }
 
+export async function getProviderStatus() {
+	return getProviderStatuses();
+}
+
 export type SaveConfigurationResult =
 	| {
 			requiresConfirmation: true;
@@ -181,6 +189,7 @@ export async function saveConfiguration(
 	}
 
 	const saved = saveRuntimeConfig(next, expectedRevision);
+	clearProviderStatuses();
 	const applied = await applyRuntimeTorrentConfig(previous.config);
 	return {
 		requiresConfirmation: false,

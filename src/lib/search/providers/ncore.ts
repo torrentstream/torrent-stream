@@ -3,11 +3,16 @@ import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 import { isImdbId } from "@/lib/media/imdb";
 import { TorrentCategory, TorrentSearchProvider } from "@/lib/search/provider";
+import {
+	recordSearchFailure,
+	recordSearchSuccess,
+} from "@/lib/search/provider-status";
 import { TorrentSearchResult } from "@/lib/search/result";
 import {
 	AuthenticatedSession,
 	type SessionCredentials,
 } from "@/lib/search/session";
+import { parseSeedRequirements, parseSize, requireCredentials } from "./shared";
 
 enum NcoreCategory {
 	Film_SD_HU = "xvid_hun",
@@ -53,17 +58,12 @@ export class NcoreProvider extends TorrentSearchProvider {
 		if (!response.ok) {
 			throw new Error(`nCore H&R request failed (${response.status})`);
 		}
-		const $ = cheerio.load(await response.text());
-
-		return $(
-			[
-				"div.box_torrent div.torrent_txt > a",
-				'a[href*="torrents.php?action=details"][title]',
-				'a[href*="details.php?id="][title]',
-			].join(","),
-		)
-			.map((_index, element) => $(element).attr("title") ?? $(element).text())
-			.get();
+		return parseSeedRequirements(this.name, await response.text(), {
+			// Each listed torrent is a row with its full name in the link's title.
+			entries: "div.hnr_tname > a[title]",
+			// The list container, rendered even when nothing is listed.
+			pageMarker: "div.hnr_torrents",
+		});
 	}
 
 	async searchTorrentsByCategory(query: string, category: TorrentCategory) {
@@ -116,6 +116,9 @@ export class NcoreProvider extends TorrentSearchProvider {
 
 				const link = `https://ncore.pro/torrents.php?${params.toString()}`;
 				const torrentsPage = await this.session.fetch(link, credentials);
+				if (!torrentsPage.ok) {
+					throw new Error(`nCore search failed (${torrentsPage.status})`);
+				}
 				const $ = cheerio.load(await torrentsPage.text());
 
 				const rssUrl = $("link[rel=alternate]").attr("href");
@@ -134,7 +137,7 @@ export class NcoreProvider extends TorrentSearchProvider {
 
 					const tracker = this.name;
 					const category = this.parseCategory(categoryHref?.split("=")[1]);
-					const size = this.parseSize($(el).find("div.box_meret2").text());
+					const size = parseSize($(el).find("div.box_meret2").text());
 					const seeds = Number($(el).find("div.box_s2").text());
 					const peers = Number($(el).find("div.box_l2").text());
 					const torrentId = $(el).next().next().attr("id");
@@ -159,24 +162,21 @@ export class NcoreProvider extends TorrentSearchProvider {
 
 				if (torrentsOnPage < 50) break;
 			}
+
+			recordSearchSuccess(this.id, torrents.length);
 		} catch (error) {
 			logger.error(error);
+			recordSearchFailure(this.id, error);
 		}
 
 		return torrents;
 	}
 
 	private getCredentials() {
-		const { username, password } = getRuntimeConfig().config.providers.ncore;
-
-		if (!username || !password) {
-			throw new Error("nCore credentials are not configured");
-		}
-
-		return {
-			username,
-			password,
-		};
+		return requireCredentials(
+			this.name,
+			getRuntimeConfig().config.providers.ncore,
+		);
 	}
 
 	private parseCategory(category: string | undefined) {
@@ -192,24 +192,5 @@ export class NcoreProvider extends TorrentSearchProvider {
 			[NcoreCategory.Sorozat_HD_HU]: "TV/HD/HU",
 			[NcoreCategory.Sorozat_HD_EN]: "TV/HD/EN",
 		}[category];
-	}
-
-	private parseSize(size: string | undefined) {
-		if (!size) return 0;
-
-		const units = {
-			TiB: 1024 ** 4,
-			GiB: 1024 ** 3,
-			MiB: 1024 ** 2,
-			KiB: 1024,
-			B: 1,
-		};
-
-		const [sizeStr, unit] = size.split(" ");
-		const sizeNum = Number(sizeStr);
-
-		if (!sizeNum || !units[unit]) return 0;
-
-		return Math.ceil(sizeNum * units[unit]);
 	}
 }
