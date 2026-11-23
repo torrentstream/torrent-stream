@@ -44,7 +44,8 @@ export async function getStremioStreams(
 	let torrents = await searchTorrents(imdbId, category, season, episode);
 
 	torrents = torrents.filter((torrent) => {
-		if (!torrent.seeds) return false;
+		// Indexers that do not report seeders at all are kept.
+		if (torrent.seeds === 0) return false;
 		if (!isAllowedLanguage(torrent.language.code)) return false;
 		if (!isAllowedFormat(torrent.formats.formats)) return false;
 		if (
@@ -180,7 +181,7 @@ async function getStreamsFromTorrent(
 	let videos = info.files.filter((file) => file.isVideo);
 	if (season !== undefined && episode !== undefined) {
 		videos = videos.filter((file) =>
-			file.isCorrectEpisode(Number(season), Number(episode)),
+			file.isCorrectEpisode(Number(season), Number(episode), torrent.name),
 		);
 	}
 
@@ -213,19 +214,25 @@ async function getStreamsFromTorrent(
 		const stream: StremioStream = {
 			name: quality,
 			description: [
-				...(videos.length > 1 ? [torrent.name, file.name] : [torrent.name]),
+				torrent.name,
+				videos.length > 1 && file.name,
 				[
-					...[torrent.size ? `💾 ${file.readableSize}` : []],
-					...[torrent.seeds ? `⬆️ ${torrent.seeds}` : []],
-					...[torrent.peers ? `⬇️ ${torrent.peers}` : []],
-				].join(" "),
-				[`${flag} ${language}`, `⚙️ ${torrent.tracker}`].join(" "),
-			].join("\n"),
+					torrent.size && `💾 ${file.readableSize}`,
+					torrent.seeds && `⬆️ ${torrent.seeds}`,
+					torrent.peers && `⬇️ ${torrent.peers}`,
+				]
+					.filter(Boolean)
+					.join(" "),
+				`${flag} ${language} ⚙️ ${torrent.tracker}`,
+			]
+				.filter(Boolean)
+				.join("\n"),
 			url: [endpoint, `${uriSegment}?s=${streamId}&f=${file.index}`].join("/"),
 			subtitles: subs.map((sub) => ({
 				id: sub.index.toString(),
 				url: [endpoint, `${uriSegment}?s=${streamId}&f=${sub.index}`].join("/"),
 				lang: sub.name,
+				format: getSubtitleFormat(sub.name),
 			})),
 			behaviorHints: {
 				bingeGroup: torrent.name,
@@ -246,6 +253,14 @@ async function getStreamsFromTorrent(
 			seeds: torrent.seeds ?? 0,
 		};
 	});
+}
+
+/** Stremio only names these two; other types are told apart by file name. */
+function getSubtitleFormat(fileName: string) {
+	const name = fileName.toLowerCase();
+	if (name.endsWith(".srt")) return "srt";
+	if (name.endsWith(".vtt")) return "vtt";
+	return undefined;
 }
 
 function isAllowedLanguage(language: string) {

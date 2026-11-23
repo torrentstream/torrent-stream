@@ -25,6 +25,8 @@ export interface TorrentData {
 	removalTimeout?: NodeJS.Timeout;
 	seed?: SeedState;
 	streamedFiles: Set<string>;
+	/** When a seed requirement check first found the torrent not required. */
+	unrequiredSince?: number;
 }
 
 declare global {
@@ -137,16 +139,23 @@ export function destroyTorrent(torrent: Torrent, deleteFiles?: boolean) {
 	return destroyTorrentInternal(torrent, { deleteFiles });
 }
 
+/**
+ * (Re)starts the countdown after which an idle torrent is removed. Every
+ * registered torrent that is neither seeding nor streaming must have one
+ * pending, otherwise it would stay in the client forever.
+ */
 export function scheduleRemoval(torrent: Torrent) {
 	const data = torrentData.get(torrent);
-	if (!data || data.seed) return;
+	if (!data || data.seed || data.streams.size > 0) return;
 	clearTimeout(data.removalTimeout);
 	data.removalTimeout = setTimeout(() => {
+		data.removalTimeout = undefined;
 		if (torrent.destroyed) {
 			unregisterTorrent(torrent, Boolean(seedRecords[torrent.infoHash]));
 			return;
 		}
-		if (data.streams.size > 0) return;
+		// Seeding may have been enabled, or a stream started, since scheduling.
+		if (data.seed || data.streams.size > 0) return;
 		const preserveSeedState = Boolean(seedRecords[torrent.infoHash]);
 		logger.debug(
 			`${preserveSeedState ? "Suspending" : "Removing"} idle torrent: ${torrent.name} (${torrent.infoHash})`,
@@ -199,6 +208,8 @@ export function registerTorrent(
 		streamedFiles: new Set(seedRecords[torrent.infoHash]?.files ?? []),
 	});
 	logger.info(`Torrent added: ${torrent.name} (${torrent.infoHash})`);
+	// Not every request ends up opening a stream (HEAD, 404, 416, aborts).
+	scheduleRemoval(torrent);
 }
 
 export function registerStream(
@@ -212,6 +223,7 @@ export function registerStream(
 	if (!stream) {
 		clearTimeout(data.removalTimeout);
 		data.removalTimeout = undefined;
+		data.unrequiredSince = undefined;
 		stream = new TorrentStream(id, torrent);
 		data.streams.set(id, stream);
 		logger.info(`Stream started: ${torrent.name} (${id})`);
@@ -244,7 +256,7 @@ export function unregisterStream(id: string, torrent: Torrent) {
 	}
 	if (data.streams.size === 0) {
 		schedulePause(torrent);
-		if (!data.seed) scheduleRemoval(torrent);
+		scheduleRemoval(torrent);
 	}
 }
 

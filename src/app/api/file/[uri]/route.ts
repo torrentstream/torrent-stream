@@ -2,7 +2,12 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import { decryptText } from "@/lib/encryption";
 import { getStreamingMimeType } from "@/lib/media/file";
-import { getOrAddTorrent, getReadableStream } from "@/lib/torrent/playback";
+import {
+	getOrAddTorrent,
+	getReadableStream,
+	metadataDeadline,
+} from "@/lib/torrent/playback";
+import { parseRange } from "@/lib/torrent/range";
 import { parseTorrentRequest } from "@/lib/torrent/request";
 
 export async function GET(
@@ -16,10 +21,11 @@ export async function GET(
 		return NextResponse.json({ error: "Missing stream ID." }, { status: 400 });
 	}
 
-	const fileIndex = Number(request.nextUrl.searchParams.get("f"));
-	if (Number.isNaN(fileIndex) || fileIndex < 0) {
+	const fileParam = request.nextUrl.searchParams.get("f");
+	if (!fileParam || !/^\d+$/.test(fileParam)) {
 		return NextResponse.json({ error: "Missing file index." }, { status: 400 });
 	}
+	const fileIndex = Number(fileParam);
 
 	let torrentRequest: ReturnType<typeof parseTorrentRequest>;
 	try {
@@ -31,12 +37,22 @@ export async function GET(
 	const torrent = await getOrAddTorrent(
 		torrentRequest.uri,
 		torrentRequest.provider,
-		request.nextUrl.searchParams.get("prepare") === "1" ? 300_000 : undefined,
+		request.nextUrl.searchParams.get("prepare") === "1"
+			? metadataDeadline
+			: undefined,
 	);
-	if (!torrent) {
+	if (torrent === "failed") {
+		// Nothing is loading any more, so the client should not keep retrying.
 		return NextResponse.json(
-			{ error: "Failed to add torrent." },
-			{ status: 500 },
+			{ error: "Torrent could not be loaded." },
+			{ status: 502 },
+		);
+	}
+	if (torrent === "pending") {
+		// The torrent keeps looking for its metadata, so a retry may succeed.
+		return NextResponse.json(
+			{ error: "Torrent is not ready yet." },
+			{ status: 503, headers: { "Retry-After": "5" } },
 		);
 	}
 
@@ -61,44 +77,16 @@ export async function GET(
 		});
 	}
 
-	const rangeHeader = request.headers.get("range");
-
-	const rangeValue = rangeHeader
-		? rangeHeader
-				.replace(/bytes=/, "")
-				.split(",")[0]
-				.trim()
-		: "0-";
-
-	const positions = rangeValue.split("-");
-
-	let start: number;
-	let end: number;
-
-	if (!positions[0] && positions[1]) {
-		const suffixLength = Number(positions[1]);
-		start =
-			Number.isNaN(suffixLength) || suffixLength <= 0
-				? 0
-				: Math.max(file.length - suffixLength, 0);
-		end = file.length - 1;
-	} else {
-		start = Number(positions[0]);
-		if (Number.isNaN(start)) {
-			start = 0;
-		}
-		end = positions[1] ? Number(positions[1]) : file.length - 1;
-		if (Number.isNaN(end) || end >= file.length) {
-			end = file.length - 1;
-		}
-	}
-
-	if (start >= file.length) {
+	const range = parseRange(request.headers.get("range"), file.length);
+	if (range === "unsatisfiable") {
 		return new NextResponse(null, {
 			status: 416,
 			headers: { "Content-Range": `bytes */${file.length}` },
 		});
 	}
+
+	const { start } = range;
+	let { end, partial } = range;
 
 	if (getRuntimeConfig().config.storage.mode === "memory") {
 		const startByte = file.offset + start;
@@ -117,12 +105,30 @@ export async function GET(
 
 		if (end - start >= maxLength) {
 			end = Math.min(start + maxLength - 1, file.length - 1);
+			// Not the whole file any more, even if no range was requested.
+			partial = true;
 		}
 	}
 
 	if (request.signal.aborted) {
 		return new NextResponse(null, { status: 499 });
 	}
+
+	const headers = new Headers({
+		Connection: "keep-alive",
+		"Keep-Alive": `timeout=60, max=10000`,
+		"Accept-Ranges": "bytes",
+		"Content-Length": `${end - start + 1}`,
+		"Content-Type": getStreamingMimeType(file.name),
+		"Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+	});
+	if (partial) {
+		headers.set("Content-Range", `bytes ${start}-${end}/${file.length}`);
+	}
+	const status = partial ? 206 : 200;
+
+	// An empty file has nothing to stream.
+	if (file.length === 0) return new NextResponse(null, { status, headers });
 
 	const stream = getReadableStream(
 		streamId,
@@ -133,17 +139,7 @@ export async function GET(
 		request.signal,
 	);
 
-	const headers = new Headers({
-		Connection: "keep-alive",
-		"Keep-Alive": `timeout=60, max=10000`,
-		"Accept-Ranges": "bytes",
-		"Content-Range": `bytes ${start}-${end}/${file.length}`,
-		"Content-Length": `${end - start + 1}`,
-		"Content-Type": getStreamingMimeType(file.name),
-		"Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-	});
-
-	return new NextResponse(stream, { status: 206, headers });
+	return new NextResponse(stream, { status, headers });
 }
 
 export const HEAD = GET;

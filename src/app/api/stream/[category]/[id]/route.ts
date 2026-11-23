@@ -42,6 +42,16 @@ export async function GET(
 		);
 	}
 
+	if (
+		category === TorrentCategory.Series &&
+		(season === undefined || episode === undefined)
+	) {
+		return NextResponse.json(
+			{ error: "Series streams need a season and an episode." },
+			{ status: 400 },
+		);
+	}
+
 	const protocol =
 		request.headers.get("x-forwarded-proto") ||
 		request.nextUrl.protocol.replace(":", "");

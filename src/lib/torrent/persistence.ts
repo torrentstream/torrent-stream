@@ -143,6 +143,7 @@ export function updateSeedRecord(
 	const record = seedRecords[torrent.infoHash];
 	if (!record) return;
 	const { uploaded, downloaded } = getSeedTotals(torrent, seed);
+	if (record.uploaded === uploaded && record.downloaded === downloaded) return;
 	record.uploaded = uploaded;
 	record.downloaded = downloaded;
 	seedRecordsDirty = true;
