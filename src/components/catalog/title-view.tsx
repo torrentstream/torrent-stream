@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/i18n";
 import {
 	type Episode,
@@ -18,11 +19,107 @@ import {
 } from "@/lib/media/catalog";
 import type { StremioStream } from "@/lib/search/stremio";
 import { FilterSelect } from "./filter-select";
-import { LoadError, Loading } from "./load-state";
-import { StreamPicker } from "./stream-picker";
+import { LoadError } from "./load-state";
+import {
+	StreamHeadingSkeleton,
+	StreamListSkeleton,
+	StreamPicker,
+} from "./stream-picker";
+
+const heroClass =
+	"grid grid-cols-1 gap-6 pt-16 md:min-h-[32rem] md:grid-cols-[12rem_minmax(0,1fr)] md:items-end md:gap-x-8 md:pt-24 lg:grid-cols-[14rem_minmax(0,1fr)]";
+const posterClass = "mx-auto w-48 rounded-lg sm:w-52 md:mx-0 md:w-full";
+const sectionClass = "space-y-6";
+const episodesHeaderClass = "flex items-center justify-between gap-4";
+const episodeGridClass =
+	"grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+const episodeCardClass =
+	"flex min-w-0 flex-col overflow-hidden rounded-xl border shadow-xs";
+
+/**
+ * Placeholder for a whole title page: the poster and details, followed by the
+ * section the title's type opens with (episodes of a show, streams of a movie).
+ */
+function TitleSkeleton({ type }: { type: MediaType }) {
+	return (
+		<>
+			<section aria-hidden="true" className="relative isolate">
+				<div className={heroClass}>
+					<Skeleton className={`${posterClass} aspect-[2/3]`} />
+					<div className="min-w-0 flex-1">
+						<div className="flex h-8 items-center sm:h-10">
+							<Skeleton className="h-6 w-2/3 max-w-md sm:h-8" />
+						</div>
+						<div className="mt-4 flex flex-wrap gap-2">
+							{["w-12", "w-12", "w-16", "w-20", "w-16"].map((width, i) => (
+								<Skeleton
+									// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+									key={i}
+									className={`h-5 rounded-4xl ${width}`}
+								/>
+							))}
+						</div>
+						<div className="mt-6 max-w-3xl">
+							{["w-full", "w-full", "w-full", "w-3/5"].map((width, i) => (
+								// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+								<div key={i} className="flex h-7 items-center">
+									<Skeleton className={`h-3.5 ${width}`} />
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+			</section>
+			<section aria-hidden="true" className={sectionClass}>
+				{type === "tv" ? (
+					<>
+						<div className={episodesHeaderClass}>
+							<Skeleton className="h-6 w-24" />
+							<Skeleton className="h-11 w-36 rounded-full" />
+						</div>
+						<EpisodeGridSkeleton count={12} />
+					</>
+				) : (
+					<>
+						<StreamHeadingSkeleton />
+						<StreamListSkeleton />
+					</>
+				)}
+			</section>
+		</>
+	);
+}
+
+/** Placeholder episode cards: a still, the name, the air date and two synopsis lines. */
+function EpisodeGridSkeleton({ count }: { count: number }) {
+	return (
+		<div aria-hidden="true" className={episodeGridClass}>
+			{Array.from({ length: count }, (_, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+				<div key={i} className={`${episodeCardClass} bg-card`}>
+					<Skeleton className="aspect-video w-full rounded-none" />
+					<div className="min-w-0 flex-1 p-4">
+						<div className="flex h-6 items-center">
+							<Skeleton className="h-4 w-2/3" />
+						</div>
+						<div className="mt-1 flex h-4 items-center">
+							<Skeleton className="h-3 w-1/3" />
+						</div>
+						<div className="mt-2 flex h-6 items-center">
+							<Skeleton className="h-3.5 w-full" />
+						</div>
+						<div className="flex h-6 items-center">
+							<Skeleton className="h-3.5 w-4/5" />
+						</div>
+					</div>
+				</div>
+			))}
+		</div>
+	);
+}
 
 export function TitleView({ type, id }: { type: MediaType; id: string }) {
-	const { t, language } = useLanguage();
+	const { language } = useLanguage();
 	const {
 		data: title,
 		error,
@@ -40,7 +137,7 @@ export function TitleView({ type, id }: { type: MediaType; id: string }) {
 			{error ? (
 				<LoadError error={error} retry={() => mutate()} />
 			) : !title ? (
-				<Loading>{t("Loading title…")}</Loading>
+				<TitleSkeleton type={type} />
 			) : (
 				<TitleContent title={title} type={type} />
 			)}
@@ -118,12 +215,12 @@ function TitleContent({
 						<div className="absolute inset-0 bg-gradient-to-r from-background/80 via-background/50 to-background/20" />
 					</div>
 				)}
-				<div className="grid grid-cols-1 gap-6 pt-16 md:min-h-[32rem] md:grid-cols-[12rem_minmax(0,1fr)] md:items-end md:gap-x-8 md:pt-24 lg:grid-cols-[14rem_minmax(0,1fr)]">
+				<div className={heroClass}>
 					{title.poster_path ? (
 						/* biome-ignore lint/performance/noImgElement: TMDB serves optimized poster sizes. */ <img
 							src={imageUrl(title.poster_path, "w342")}
 							alt=""
-							className="mx-auto w-48 rounded-lg border shadow-xl sm:w-52 md:mx-0 md:w-full"
+							className={`${posterClass} aspect-[2/3] border object-cover shadow-xl`}
 						/>
 					) : (
 						<Film className="mx-auto size-20 text-muted-foreground md:mx-0" />
@@ -166,14 +263,14 @@ function TitleContent({
 				</div>
 			</section>
 			{type === "tv" && (
-				<section className="space-y-6">
+				<section className={sectionClass}>
 					{!seasons.length ? (
 						<p className="py-6 text-muted-foreground">
 							{t("No episodes are available yet.")}
 						</p>
 					) : (
 						<>
-							<div className="flex items-center justify-between gap-4">
+							<div className={episodesHeaderClass}>
 								<div className="flex items-center gap-3">
 									<h2 className="text-xl font-semibold">{t("Episodes")}</h2>
 									{episodes.data && (
@@ -209,16 +306,18 @@ function TitleContent({
 									retry={() => episodes.mutate()}
 								/>
 							) : !episodes.data ? (
-								<Loading>{t("Loading episodes…")}</Loading>
+								<EpisodeGridSkeleton
+									count={
+										seasons.find((item) => item.season_number === season)
+											?.episode_count || 12
+									}
+								/>
 							) : !episodes.data.episodes.length ? (
 								<p className="py-6 text-muted-foreground">
 									{t("No episodes in this season yet.")}
 								</p>
 							) : (
-								<div
-									key={season}
-									className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-								>
+								<div key={season} className={episodeGridClass}>
 									{[...episodes.data.episodes]
 										.sort((a, b) => a.episode_number - b.episode_number)
 										.map((item) => (
@@ -228,7 +327,7 @@ function TitleContent({
 												aria-pressed={episode?.id === item.id}
 												title={item.overview || t("No synopsis available.")}
 												onClick={() => setEpisode({ ...item })}
-												className={`group flex min-w-0 flex-col overflow-hidden rounded-xl border text-left shadow-xs transition hover:border-foreground/30 ${episode?.id === item.id ? "border-foreground/40 bg-accent" : "bg-card"}`}
+												className={`group ${episodeCardClass} text-left transition hover:border-foreground/30 ${episode?.id === item.id ? "border-foreground/40 bg-accent" : "bg-card"}`}
 											>
 												<span className="relative block aspect-video w-full overflow-hidden bg-secondary">
 													{item.still_path ? (

@@ -1,20 +1,5 @@
 "use client";
-import { LoaderCircle } from "lucide-react";
 import { useLanguage } from "@/components/language-provider";
-
-export function Loading({
-	children = "Loading…",
-}: {
-	children?: React.ReactNode;
-}) {
-	const { t } = useLanguage();
-	return (
-		<output className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
-			<LoaderCircle className="size-5 animate-spin" />
-			{typeof children === "string" ? t(children) : children}
-		</output>
-	);
-}
 
 export function LoadError({
 	error,

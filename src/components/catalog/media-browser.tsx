@@ -10,11 +10,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { useLanguage } from "@/components/language-provider";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	type CatalogResults,
 	fetchCatalog,
@@ -24,7 +25,62 @@ import {
 } from "@/lib/media/catalog";
 import { BrowseSearch } from "./browse-search";
 import { FilterSelect } from "./filter-select";
-import { LoadError, Loading } from "./load-state";
+import { LoadError } from "./load-state";
+
+const headerClass = "flex flex-wrap items-center justify-between gap-4";
+const filtersClass =
+	"grid w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:flex xl:w-auto xl:shrink-0";
+const gridWrapperClass = "relative flex flex-col gap-6";
+const gridClass =
+	"grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6";
+/** Titles in a full catalog page; some pages hold fewer after filtering. */
+const PAGE_SIZE = 20;
+
+/** Placeholder with the dimensions of a title card in the grid. */
+function TitleCardSkeleton({ className = "" }: { className?: string }) {
+	return (
+		<div aria-hidden="true" className={`min-w-0 ${className}`}>
+			<Skeleton className="mb-3 aspect-[2/3] rounded-xl" />
+			<div className="flex h-5 items-center">
+				<Skeleton className="h-3.5 w-3/4" />
+			</div>
+			<div className="mt-1 flex h-4 items-center">
+				<Skeleton className="h-3 w-1/2" />
+			</div>
+		</div>
+	);
+}
+
+/** Stands in for the whole browser until it can read the URL's filters. */
+export function MediaBrowserSkeleton() {
+	return (
+		<div className="space-y-6">
+			<div aria-hidden="true" className={headerClass}>
+				<Skeleton className="h-[50px] w-full rounded-full xl:w-auto xl:flex-1" />
+				<div className={filtersClass}>
+					{Array.from({ length: 4 }, (_, i) => (
+						// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+						<Skeleton key={i} className="h-11 rounded-full xl:w-40" />
+					))}
+				</div>
+			</div>
+			<div className={gridWrapperClass}>
+				<div className={gridClass}>
+					{Array.from({ length: PAGE_SIZE }, (_, i) => (
+						<TitleCardSkeleton
+							// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+							key={i}
+							// The column count is unknown before hydration, so the cards
+							// that would start a partial row are hidden with CSS instead:
+							// 20 fills 2 and 5 columns, 18 fills 3 and 6.
+							className={i >= 18 ? "sm:max-lg:hidden xl:hidden" : ""}
+						/>
+					))}
+				</div>
+			</div>
+		</div>
+	);
+}
 
 export function MediaBrowser() {
 	const { t, language } = useLanguage();
@@ -59,9 +115,9 @@ export function MediaBrowser() {
 	}
 	return (
 		<div className="space-y-6">
-			<header className="flex flex-wrap items-center justify-between gap-4">
+			<header className={headerClass}>
 				<BrowseSearch query={query} onSearch={(q) => navigate({ q })} />
-				<div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-4 xl:flex xl:w-auto xl:shrink-0">
+				<div className={filtersClass}>
 					<FilterSelect
 						icon={Tags}
 						aria-label={t("Genre")}
@@ -196,13 +252,29 @@ function TitleGrid({ filters }: { filters: string }) {
 	const visibleTitles = hasMore
 		? titles.slice(0, Math.floor(titles.length / columns) * columns)
 		: titles;
+	// Placeholders for the rows the page being loaded is expected to add, so
+	// they are replaced in place: the held-back partial row plus a full page.
+	// A revalidation that adds no page (`loading` without one pending) gets none.
+	const pagePending = !data || (size > data.length && hasMore);
+	const skeletons =
+		loading && pagePending
+			? Math.max(
+					Math.floor(
+						(titles.length - visibleTitles.length + PAGE_SIZE) / columns,
+					),
+					1,
+				) * columns
+			: 0;
 
-	useEffect(() => {
+	// Measured before the first paint so the skeleton rows are whole from the
+	// start; the grid always has cards or skeletons to derive its columns from.
+	useLayoutEffect(() => {
 		const grid = gridRef.current;
 		if (!grid) return;
-		const observer = new ResizeObserver(() => {
+		const measure = () =>
 			setColumns(getComputedStyle(grid).gridTemplateColumns.split(" ").length);
-		});
+		measure();
+		const observer = new ResizeObserver(measure);
 		observer.observe(grid);
 		return () => observer.disconnect();
 	}, []);
@@ -224,11 +296,8 @@ function TitleGrid({ filters }: { filters: string }) {
 	}, [hasMore, loading, error, setSize]);
 
 	return (
-		<div className="relative flex flex-col gap-6">
-			<div
-				ref={gridRef}
-				className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
-			>
+		<div className={gridWrapperClass}>
+			<div ref={gridRef} className={gridClass}>
 				{visibleTitles.map((title) => (
 					<Link
 						key={`${title.media_type}-${title.id}`}
@@ -270,6 +339,10 @@ function TitleGrid({ filters }: { filters: string }) {
 						</p>
 					</Link>
 				))}
+				{Array.from({ length: skeletons }, (_, i) => (
+					// biome-ignore lint/suspicious/noArrayIndexKey: Static placeholders.
+					<TitleCardSkeleton key={i} />
+				))}
 			</div>
 			{!loading && !error && !titles.length && (
 				<div className="py-20 text-center">
@@ -281,7 +354,6 @@ function TitleGrid({ filters }: { filters: string }) {
 				</div>
 			)}
 			<div ref={sentinelRef} className="absolute bottom-0 h-px" />
-			{loading && <Loading>{t("Loading titles…")}</Loading>}
 			{error && <LoadError error={error} retry={() => mutate()} />}
 		</div>
 	);
