@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { parse } from "node:url";
 import next from "next";
 import { deploymentConfig } from "./lib/config/runtime";
+import { forwardContentLength } from "./lib/content-length";
 import { logger } from "./lib/logging/logger";
 
 const { port, dev } = deploymentConfig;
@@ -10,6 +11,7 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
 	createServer((req, res) => {
+		forwardContentLength(res);
 		const parsedUrl = parse(req.url as string, true);
 		handle(req, res, parsedUrl);
 	}).listen(port);

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getRuntimeConfig } from "@/lib/config/runtime";
+import { contentLengthHeader } from "@/lib/content-length";
 import { decryptText } from "@/lib/encryption";
 import { getStreamingMimeType } from "@/lib/media/file";
 import {
@@ -70,7 +71,9 @@ export async function GET(
 		return new NextResponse(null, {
 			headers: {
 				"Accept-Ranges": "bytes",
-				"Content-Length": String(file.length),
+				[contentLengthHeader]: String(file.length),
+				// Compression would break byte ranges and the size above.
+				"Cache-Control": "no-transform",
 				"Content-Type": getStreamingMimeType(file.name),
 				"Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
 			},
@@ -104,7 +107,9 @@ export async function GET(
 		Connection: "keep-alive",
 		"Keep-Alive": `timeout=60, max=10000`,
 		"Accept-Ranges": "bytes",
-		"Content-Length": `${end - start + 1}`,
+		[contentLengthHeader]: `${end - start + 1}`,
+		// Compression would break byte ranges and the size above.
+		"Cache-Control": "no-transform",
 		"Content-Type": getStreamingMimeType(file.name),
 		"Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
 	});
