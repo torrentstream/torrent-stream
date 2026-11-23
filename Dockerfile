@@ -1,8 +1,8 @@
 # ==========================================
 # GLOBAL ARGS (Change versions here)
 # ==========================================
-ARG NODE_VERSION=24.12.0
-ARG BUN_VERSION=1.3.2
+ARG NODE_VERSION=26.13.1
+ARG BUN_VERSION=1.4.5
 ARG CADDY_VERSION=2.11.9
 
 # ==========================================
