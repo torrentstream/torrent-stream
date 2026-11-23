@@ -16,7 +16,8 @@ import { getInfoClient } from "./clients";
 import { getHistoricalSpeeds, getStreamedFiles, getStreams } from "./streams";
 
 const torrentInfoCache = new LRU<string, Promise<TorrentInfo | undefined>>(500);
-const limitFetchTorrentInfo = createLimit(10);
+// Lookups spend nearly all their time waiting for peers, so many can run at once.
+const limitFetchTorrentInfo = createLimit(30);
 
 export function getTorrentInfo(uri: string) {
 	const cached = torrentInfoCache.get(uri);
