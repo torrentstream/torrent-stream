@@ -189,5 +189,6 @@
 	"{minutes} min": "{minutes} perc",
 	"{language} · Text": "{language} · Szöveg",
 	"Working": "Működik",
-	"Not working": "Nem működik"
+	"Not working": "Nem működik",
+	"Status:": "Állapot:"
 }

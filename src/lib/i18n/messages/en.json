@@ -189,5 +189,6 @@
 	"{minutes} min": "{minutes} min",
 	"{language} · Text": "{language} · Text",
 	"Working": "Working",
-	"Not working": "Not working"
+	"Not working": "Not working",
+	"Status:": "Status:"
 }

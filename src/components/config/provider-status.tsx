@@ -25,6 +25,7 @@ export function ProviderStatusLine({ provider }: { provider: ProviderId }) {
 
 	return (
 		<p className="mt-4 flex items-center gap-2 border-t pt-4 text-xs text-muted-foreground">
+			{t("Status:")}
 			<span
 				className={`size-2 shrink-0 rounded-full ${error ? "bg-destructive" : "bg-emerald-500"}`}
 			/>
