@@ -3,7 +3,7 @@
 # ==========================================
 ARG NODE_VERSION=24.12.0
 ARG BUN_VERSION=1.3.2
-ARG CADDY_VERSION=latest
+ARG CADDY_VERSION=2.11.9
 
 # ==========================================
 # Stage 1: Get Bun Binary
