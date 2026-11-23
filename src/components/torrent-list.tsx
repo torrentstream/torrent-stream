@@ -37,6 +37,7 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { getReadableSpeed, roundSpeed } from "@/lib/media/file";
+import { cn } from "@/lib/utils";
 import { FlipNumber } from "./flip-number";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -142,6 +143,11 @@ function TorrentCard({
 		lastDate = new Date(lastDate.getTime() + interval * 1000);
 		chartData.push({ date: lastDate, download: 0, upload: 0 });
 	}
+
+	// A flat graph says nothing, so it is folded away until there is traffic.
+	const hasTraffic = chartData.some(
+		({ download, upload }) => download > 0 || upload > 0,
+	);
 
 	const chartConfig: ChartConfig = {
 		download: { label: t("Download"), color: "white" },
@@ -255,70 +261,82 @@ function TorrentCard({
 					</div>
 				</div>
 
-				<ChartContainer config={chartConfig} className="aspect-auto h-32">
-					<AreaChart data={chartData}>
-						<defs>
-							<linearGradient id="fillDownload" x1="0" y1="0" x2="0" y2="1">
-								<stop
-									offset="5%"
-									stopColor="var(--color-download)"
-									stopOpacity={0.8}
+				<div
+					inert={!hasTraffic}
+					className={cn(
+						"grid transition-[grid-template-rows,margin,opacity] duration-500 ease-in-out motion-reduce:transition-none",
+						hasTraffic
+							? "grid-rows-[1fr] opacity-100"
+							: "-mt-2 grid-rows-[0fr] opacity-0",
+					)}
+				>
+					<div className="min-h-0 overflow-hidden">
+						<ChartContainer config={chartConfig} className="aspect-auto h-32">
+							<AreaChart data={chartData}>
+								<defs>
+									<linearGradient id="fillDownload" x1="0" y1="0" x2="0" y2="1">
+										<stop
+											offset="5%"
+											stopColor="var(--color-download)"
+											stopOpacity={0.8}
+										/>
+										<stop
+											offset="95%"
+											stopColor="var(--color-download)"
+											stopOpacity={0.1}
+										/>
+									</linearGradient>
+									<linearGradient id="fillUpload" x1="0" y1="0" x2="0" y2="1">
+										<stop
+											offset="5%"
+											stopColor="var(--color-upload)"
+											stopOpacity={0.8}
+										/>
+										<stop
+											offset="95%"
+											stopColor="var(--color-upload)"
+											stopOpacity={0.1}
+										/>
+									</linearGradient>
+								</defs>
+								<Area
+									dataKey="download"
+									type="natural"
+									fill="url(#fillDownload)"
+									stroke="var(--color-download)"
+									stackId="download"
 								/>
-								<stop
-									offset="95%"
-									stopColor="var(--color-download)"
-									stopOpacity={0.1}
+								<Area
+									dataKey="upload"
+									type="natural"
+									fill="url(#fillUpload)"
+									stroke="var(--color-upload)"
+									stackId="upload"
 								/>
-							</linearGradient>
-							<linearGradient id="fillUpload" x1="0" y1="0" x2="0" y2="1">
-								<stop
-									offset="5%"
-									stopColor="var(--color-upload)"
-									stopOpacity={0.8}
+								<ChartTooltip
+									cursor={false}
+									content={({ active, payload }) => {
+										if (!active || !payload?.length) return null;
+										const date = payload[0]?.payload?.date;
+										if (!date || date > new Date()) return null;
+										const formattedPayload = payload.map((entry) => ({
+											...entry,
+											value: getReadableSpeed(entry.value as number),
+										}));
+										return (
+											<ChartTooltipContent
+												active={true}
+												payload={formattedPayload}
+												labelFormatter={() => date.toLocaleTimeString()}
+												indicator="dot"
+											/>
+										);
+									}}
 								/>
-								<stop
-									offset="95%"
-									stopColor="var(--color-upload)"
-									stopOpacity={0.1}
-								/>
-							</linearGradient>
-						</defs>
-						<Area
-							dataKey="download"
-							type="natural"
-							fill="url(#fillDownload)"
-							stroke="var(--color-download)"
-							stackId="download"
-						/>
-						<Area
-							dataKey="upload"
-							type="natural"
-							fill="url(#fillUpload)"
-							stroke="var(--color-upload)"
-							stackId="upload"
-						/>
-						<ChartTooltip
-							cursor={false}
-							content={({ active, payload }) => {
-								if (!active || !payload?.length) return null;
-								const date = payload[0]?.payload?.date;
-								if (!date || date > new Date()) return null;
-								const formattedPayload = payload.map((entry) => ({
-									...entry,
-									value: getReadableSpeed(entry.value as number),
-								}));
-								return (
-									<ChartTooltipContent
-										active={true}
-										payload={formattedPayload}
-										labelFormatter={() => date.toLocaleTimeString()}
-										indicator="dot"
-									/>
-								);
-							}}
-						/>
-					</AreaChart>
-				</ChartContainer>
+							</AreaChart>
+						</ChartContainer>
+					</div>
+				</div>
 
 				<div ref={filesParent}>
 					{files.length > 0 && (
