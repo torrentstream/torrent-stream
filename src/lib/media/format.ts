@@ -62,8 +62,15 @@ export const formatStrings: { [key in TorrentFormat]: string } = {
 	[TorrentFormat.Xvid]: "Xvid",
 };
 
+// A trailing ".ts" is the MPEG-TS container, not a telesync tag. Matched
+// case-sensitively: a torrent name ending in an upper-case ".TS" is a telesync.
+const videoExtension = /\.(?:ts|m2ts|mts|mkv|mp4|m4v|avi|mov|wmv|webm|mpe?g)$/;
+
 export function getFormats(name: string) {
-	const normalized = name.replace(/\W/g, " ").toLowerCase();
+	const normalized = name
+		.replace(videoExtension, "")
+		.replace(/\W/g, " ")
+		.toLowerCase();
 	const split = normalized.split(" ");
 
 	let score = 0;

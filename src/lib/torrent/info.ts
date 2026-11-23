@@ -3,7 +3,7 @@ import type { Torrent, TorrentFile } from "webtorrent";
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import { createLimit } from "@/lib/limit";
 import { LRU } from "@/lib/lru";
-import { getEpisodeNumber } from "@/lib/media/episode";
+import { isEpisodeFile } from "@/lib/media/episode";
 import {
 	getReadableProgress,
 	getReadableSize,
@@ -154,10 +154,9 @@ export class TorrentFileInfo {
 		this.isSubtitle = isSubtitleFile(this.name);
 	}
 
-	isCorrectEpisode(season: number, episode: number) {
-		const guess = getEpisodeNumber(this.name);
-		if (guess.season === season && guess.episode === episode) return true;
+	/** `torrentName` supplies the season when neither file nor folders name it. */
+	isCorrectEpisode(season: number, episode: number, torrentName?: string) {
 		if (season === 0) return true;
-		return false;
+		return isEpisodeFile(this.path, season, episode, torrentName);
 	}
 }

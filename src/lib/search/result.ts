@@ -72,11 +72,12 @@ export class TorrentSearchResult {
 		const guess = getEpisodeNumber(this.name);
 		if (guess.completeSeries) return true;
 		if (guess.seasons?.includes(season)) return true;
-		if (guess.season === season && guess.episode === episode) return true;
+		if (guess.season === season && guess.episodes?.includes(episode))
+			return true;
 		if (season === 0) {
 			if (this.name.toLowerCase().includes("special")) return true;
-			if (guess.season === undefined && guess.seasons === undefined)
-				return true;
+			// Any torrent that does not name a regular season may hold specials.
+			if (!guess.season && guess.seasons === undefined) return true;
 		}
 		return false;
 	}
