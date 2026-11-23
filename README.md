@@ -2,6 +2,9 @@
 
 Self-hosted Stremio addon for torrent streaming, with optional in-memory storage, and automatic TLS.
 
+> [!WARNING]
+> Torrent Stream has no authentication by design. It is meant to run on a private/home network only: do not expose ports 3000 or 443 to the internet. Anyone who can reach the app can read your tracker credentials and change its settings. If you need remote access, put it behind a VPN or an authenticating reverse proxy.
+
 ## How to run the app
 
 ### Building Docker image from source
@@ -38,6 +41,8 @@ docker run -d \
   -v torrent_stream_data:/data \
   torrentstream/torrent-stream:latest
 ```
+
+The published ports (3000 and 443) must only be reachable from your private network; the app has no authentication, so do not forward them on your router or otherwise expose them to the internet.
 
 ## How to install the addon
 
