@@ -1,10 +1,6 @@
 import { getRuntimeConfig } from "@/lib/config/runtime";
 import type { RuntimeConfig } from "@/lib/config/schema";
-import {
-	applyTransferLimits,
-	getTorrentClient,
-	restartTorrentClients,
-} from "./clients";
+import { applyTransferLimits, getTorrentClient } from "./clients";
 import {
 	flushSeedRecords,
 	initSeedState,
@@ -46,10 +42,11 @@ export async function applyRuntimeTorrentConfig(previous: RuntimeConfig) {
 		previous.storage.mode !== current.storage.mode ||
 		previous.storage.path !== current.storage.path
 	) {
+		// Storage is chosen per torrent when it is added, so the clients stay:
+		// removing every torrent and resuming seeding applies the new storage.
 		const interruptedStreams = await suspendAllTorrents(previous.storage.mode);
-		await restartTorrentClients();
 		await resumeSeedingTorrents();
-		return { interruptedStreams, clientRestarted: true };
+		return { interruptedStreams, torrentsReloaded: true };
 	}
 
 	applyTransferLimits();
@@ -84,5 +81,5 @@ export async function applyRuntimeTorrentConfig(previous: RuntimeConfig) {
 	await Promise.all(operations);
 	await resumeSeedingTorrents();
 	flushSeedRecords(true);
-	return { interruptedStreams: 0, clientRestarted: false };
+	return { interruptedStreams: 0, torrentsReloaded: false };
 }

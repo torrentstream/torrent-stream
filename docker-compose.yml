@@ -10,6 +10,8 @@ services:
     ports:
       - "3000:3000"
       - "443:443"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"
     env_file:
       - path: .env
         required: true

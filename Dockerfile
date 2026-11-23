@@ -75,6 +75,9 @@ COPY --from=next-builder /app/.next ./.next
 COPY --from=next-builder /app/dist ./dist
 COPY --from=next-builder /app/public ./public
 
+# Peers connect to this port; publish it over TCP and UDP under the same number.
+ENV TORRENT_PORT=6881
+
 # Expose and Run
-EXPOSE 3000 443
+EXPOSE 3000 443 6881/tcp 6881/udp
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

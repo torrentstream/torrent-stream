@@ -82,13 +82,13 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			setDraft(cloneConfig(result.config));
 			setConfirmation(undefined);
 			setMessage(
-				result.clientRestarted
+				result.torrentsReloaded
 					? result.interruptedStreams
 						? t(
-								"Saved. Torrent clients restarted and {count} active streams interrupted.",
+								"Saved. Torrents reloaded and {count} active streams interrupted.",
 								{ count: result.interruptedStreams },
 							)
-						: t("Saved. Torrent clients restarted.")
+						: t("Saved. Torrents reloaded.")
 					: t("Configuration saved and applied."),
 			);
 		} catch (cause) {
@@ -179,10 +179,10 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>{t("Restart torrent clients?")}</DialogTitle>
+						<DialogTitle>{t("Reload torrents?")}</DialogTitle>
 						<DialogDescription>
 							{t(
-								"Changing storage mode or its data path rebuilds the torrent clients.",
+								"Changing storage mode or its data path reloads all torrents.",
 							)}{" "}
 							{confirmation?.activeStreams
 								? t("{count} active streams will be interrupted.", {
@@ -201,7 +201,7 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 							disabled={saving}
 							variant="destructive"
 						>
-							{t("Restart and save")}
+							{t("Reload and save")}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

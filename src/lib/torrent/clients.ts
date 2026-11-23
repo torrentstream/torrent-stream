@@ -1,5 +1,5 @@
 import WebTorrent from "webtorrent";
-import { getRuntimeConfig } from "@/lib/config/runtime";
+import { deploymentConfig, getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 
 declare global {
@@ -27,7 +27,13 @@ function attachMainClientErrorHandler(client: WebTorrent) {
 
 function createTorrentClient() {
 	const { downloadLimit, uploadLimit } = getRuntimeConfig().config.torrent;
-	const client = new WebTorrent({ downloadLimit, uploadLimit });
+	// Peers connect to this port (TCP and uTP); the info client and DHT keep
+	// random ports, since two sockets cannot share it.
+	const client = new WebTorrent({
+		downloadLimit,
+		uploadLimit,
+		torrentPort: deploymentConfig.torrentPort,
+	});
 	attachMainClientErrorHandler(client);
 	return client;
 }
@@ -55,31 +61,9 @@ export function getInfoClient() {
 	return global.infoClientInstance;
 }
 
-function destroyClient(client: WebTorrent) {
-	return new Promise<void>((resolve) => {
-		if (isDestroyed(client)) return resolve();
-		client.destroy(() => resolve());
-	});
-}
-
 export function applyTransferLimits() {
 	const { downloadLimit, uploadLimit } = getRuntimeConfig().config.torrent;
 	const client = getTorrentClient();
 	client.throttleDownload(downloadLimit);
 	client.throttleUpload(uploadLimit);
-}
-
-export async function restartTorrentClients() {
-	const previousTorrentClient = getTorrentClient();
-	const previousInfoClient = getInfoClient();
-
-	// Publish replacements before destroying the old clients so other Next.js
-	// server chunks can never resolve a destroyed singleton during the restart.
-	global.torrentClientInstance = createTorrentClient();
-	global.infoClientInstance = createInfoClient();
-
-	await Promise.all([
-		destroyClient(previousTorrentClient),
-		destroyClient(previousInfoClient),
-	]);
 }

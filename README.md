@@ -35,14 +35,17 @@ docker run -d \
   -e CONFIG_PATH=/config \
   -p 3000:3000 \
   -p 443:443 \
+  -p 6881:6881/tcp \
+  -p 6881:6881/udp \
   -v torrent_stream_caddy:/caddy \
   -v torrent_stream_config:/config \
   -v torrent_stream_data:/data \
   torrentstream/torrent-stream:latest
 ```
 
-> [!WARNING]
-> Torrent Stream has no authentication by design. It is meant to run on a private/home network only: do not expose ports 3000 or 443 to the internet. Anyone who can reach the app can read your tracker credentials and change its settings. If you need remote access, put it behind a VPN or an authenticating reverse proxy.
+Torrent Stream has no authentication by design. It is meant to run on a private/home network only: do not expose ports 3000 or 443 to the internet. Anyone who can reach the app can read your tracker credentials and change its settings. If you need remote access, put it behind a VPN or an authenticating reverse proxy.
+
+Port 6881 (TCP and UDP) is different: it is the BitTorrent port that other peers connect to, so forward it on your router to make seeding work well. Use the same number inside and outside the container, because the app announces its own port to trackers.
 
 ## How to install the addon
 
@@ -91,14 +94,15 @@ rebuilds the torrent clients and interrupts active playback.
 
 The application itself only reads these environment variables:
 
-| Variable       | Description                                                                          | Default              |
-| -------------- | ------------------------------------------------------------------------------------ | -------------------- |
-| PORT           | HTTP listen port.                                                                    | `3000`               |
-| LOG_LEVEL      | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`.                     | `info`               |
-| DOMAIN_NAME    | DuckDNS domain used by the bundled Caddy server.                                     | -                    |
-| DUCKDNS_TOKEN  | DuckDNS token used for DNS-01 TLS.                                                   | -                    |
-| ENCRYPTION_KEY | Long random key used to encrypt stream URLs.                                         | Development fallback |
-| CONFIG_PATH    | Directory containing `config.json`, resumable torrent records, and torrent metainfo. | `/config`            |
+| Variable       | Description                                                                          | Default                                      |
+| -------------- | ------------------------------------------------------------------------------------ | -------------------------------------------- |
+| PORT           | HTTP listen port.                                                                    | `3000`                                       |
+| LOG_LEVEL      | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`.                     | `info`                                       |
+| TORRENT_PORT   | Port other peers connect to, over TCP and UDP.                                       | `6881` in the Docker image, random otherwise |
+| DOMAIN_NAME    | DuckDNS domain used by the bundled Caddy server.                                     | -                                            |
+| DUCKDNS_TOKEN  | DuckDNS token used for DNS-01 TLS.                                                   | -                                            |
+| ENCRYPTION_KEY | Long random key used to encrypt stream URLs.                                         | Development fallback                         |
+| CONFIG_PATH    | Directory containing `config.json`, resumable torrent records, and torrent metainfo. | `/config`                                    |
 
 Use `/config` and the configured torrent storage path (default `/data`) with
 persistent volumes when durable configuration or file storage is desired.

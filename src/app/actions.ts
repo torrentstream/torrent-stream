@@ -161,7 +161,7 @@ export type SaveConfigurationResult =
 			requiresConfirmation: false;
 			config: RuntimeConfig;
 			revision: string;
-			clientRestarted: boolean;
+			torrentsReloaded: boolean;
 			interruptedStreams: number;
 	  };
 

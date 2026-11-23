@@ -20,6 +20,8 @@ loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 
 export const deploymentConfig = {
 	port: Number(process.env.PORT) || 3000,
+	// 0 lets the system pick a free port on every start.
+	torrentPort: Number(process.env.TORRENT_PORT) || 0,
 	dev: process.env.NODE_ENV !== "production",
 	logLevel: parseEnum(LogLevel, process.env.LOG_LEVEL, LogLevel.Info),
 	encryptionKey: process.env.ENCRYPTION_KEY || "torrent_stream_default_key",
