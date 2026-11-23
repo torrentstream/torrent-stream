@@ -73,6 +73,12 @@ export function ConfigForm({ initialSnapshot }: { initialSnapshot: Snapshot }) {
 			};
 			setSaved(snapshot);
 			void mutate("provider-status");
+			// Lists found with the old search settings must not be shown again.
+			void mutate(
+				(key) => typeof key === "string" && key.startsWith("/api/stream/"),
+				undefined,
+				{ revalidate: false },
+			);
 			setDraft(cloneConfig(result.config));
 			setConfirmation(undefined);
 			setMessage(
