@@ -10,6 +10,7 @@ Self-hosted Stremio addon for torrent streaming, with optional in-memory storage
 ```bash
 git clone https://github.com/torrentstream/torrent-stream.git
 ```
+
 2. Edit the `.env` file as you need
 3. Start with Docker Compose:
 ```bash
@@ -22,6 +23,7 @@ docker compose up -d
 ```bash
 docker pull torrentstream/torrent-stream:latest
 ```
+
 2. Start up container:
 ```bash
 docker run -d \
@@ -62,8 +64,10 @@ Caddy and it's DuckDNS plugin is bundled with the docker container and it can au
 1. Create a DuckDNS account: https://www.duckdns.org
 2. Create a subdomain in the DuckDNS dashboard and point it to your server's lan IP (you'll also need to disable DNS rebinding protection in your router settings if it was enabled)
 3. Set these environment variables for the application:
+
 - DUCKDNS_TOKEN: your DuckDNS token
 - DOMAIN_NAME: your-subdomain.duckdns.org
+
 4. Run the app, Caddy will request and renew TLS certificates automatically
 5. Open your browser at https://your-subdomain.duckdns.org (wait until Caddy resolves the certificate if the page doesn't load at first)
 6. Click the Install Stremio Addon button or right click it and copy link, then use the manifest URL to install it into Stremio
@@ -87,14 +91,14 @@ rebuilds the torrent clients and interrupts active playback.
 
 The application itself only reads these environment variables:
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| PORT | HTTP listen port. | `3000` |
-| LOG_LEVEL | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. | `info` |
-| DOMAIN_NAME | DuckDNS domain used by the bundled Caddy server. | - |
-| DUCKDNS_TOKEN | DuckDNS token used for DNS-01 TLS. | - |
-| ENCRYPTION_KEY | Long random key used to encrypt stream URLs. | Development fallback |
-| CONFIG_PATH | Directory containing `config.json`, resumable torrent records, and torrent metainfo. | `/config` |
+| Variable       | Description                                                                          | Default              |
+| -------------- | ------------------------------------------------------------------------------------ | -------------------- |
+| PORT           | HTTP listen port.                                                                    | `3000`               |
+| LOG_LEVEL      | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`.                     | `info`               |
+| DOMAIN_NAME    | DuckDNS domain used by the bundled Caddy server.                                     | -                    |
+| DUCKDNS_TOKEN  | DuckDNS token used for DNS-01 TLS.                                                   | -                    |
+| ENCRYPTION_KEY | Long random key used to encrypt stream URLs.                                         | Development fallback |
+| CONFIG_PATH    | Directory containing `config.json`, resumable torrent records, and torrent metainfo. | `/config`            |
 
 Use `/config` and the configured torrent storage path (default `/data`) with
 persistent volumes when durable configuration or file storage is desired.
