@@ -310,8 +310,9 @@ export function InstallDialog({
 									disabled={loading}
 								/>
 								<FieldDescription className="text-xs">
-									Get your auth key from Stremio Web: open DevTools console and
-									run{" "}
+									{t(
+										"Get your auth key from Stremio Web: open DevTools console and run",
+									)}{" "}
 									<span className="block mt-2 break-all font-mono bg-accent p-2 rounded-md">
 										JSON.parse(localStorage.getItem("profile")).auth.key
 									</span>
@@ -376,7 +377,7 @@ export function InstallDialog({
 									{t("Installed Addon Successfully!")}
 								</>
 							) : (
-								"Install Addon"
+								t("Install Addon")
 							)}
 						</Button>
 					)}

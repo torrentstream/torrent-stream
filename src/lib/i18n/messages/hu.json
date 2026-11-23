@@ -192,5 +192,7 @@
 	"{count} episodes": "{count} epizód",
 	"Episode {number}": "{number}. epizód",
 	"{minutes} min": "{minutes} perc",
-	"{language} · Text": "{language} · Szöveg"
+	"{language} · Text": "{language} · Szöveg",
+	"Working": "Működik",
+	"Not working": "Nem működik"
 }
