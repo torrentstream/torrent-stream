@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseRange } from "./range";
+import { capToMemoryWindow, parseRange } from "./range";
 
 const whole = { start: 0, end: 999, partial: false };
 
@@ -101,5 +101,64 @@ describe("parseRange", () => {
 			end: -1,
 			partial: false,
 		});
+	});
+});
+
+describe("capToMemoryWindow", () => {
+	// 100-byte pieces and room for 4 pieces: the start piece plus 3 more.
+	const window = {
+		fileOffset: 0,
+		fileLength: 10_000,
+		pieceLength: 100,
+		memoryLimit: 800,
+	};
+
+	it("leaves a range that fits unchanged", () => {
+		const range = { start: 0, end: 399, partial: true };
+		assert.deepEqual(capToMemoryWindow(range, window), range);
+	});
+
+	it("caps a whole-file request and makes it partial", () => {
+		assert.deepEqual(
+			capToMemoryWindow({ start: 0, end: 9_999, partial: false }, window),
+			{ start: 0, end: 399, partial: true },
+		);
+	});
+
+	it("ends on a piece boundary when starting mid-piece", () => {
+		assert.deepEqual(
+			capToMemoryWindow({ start: 150, end: 9_999, partial: true }, window),
+			{ start: 150, end: 499, partial: true },
+		);
+	});
+
+	it("aligns to the torrent's pieces, not the file's start", () => {
+		assert.deepEqual(
+			capToMemoryWindow(
+				{ start: 0, end: 9_999, partial: false },
+				{ ...window, fileOffset: 1_030 },
+			),
+			{ start: 0, end: 369, partial: true },
+		);
+	});
+
+	it("serves at least the start piece with a tiny memory limit", () => {
+		assert.deepEqual(
+			capToMemoryWindow(
+				{ start: 120, end: 9_999, partial: true },
+				{ ...window, memoryLimit: 1 },
+			),
+			{ start: 120, end: 199, partial: true },
+		);
+	});
+
+	it("does not go past the end of the file", () => {
+		assert.deepEqual(
+			capToMemoryWindow(
+				{ start: 9_950, end: 9_999, partial: true },
+				{ ...window, pieceLength: 1_000_000, memoryLimit: 1 },
+			),
+			{ start: 9_950, end: 9_999, partial: true },
+		);
 	});
 });

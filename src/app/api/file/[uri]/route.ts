@@ -7,7 +7,7 @@ import {
 	getReadableStream,
 	metadataDeadline,
 } from "@/lib/torrent/playback";
-import { parseRange } from "@/lib/torrent/range";
+import { capToMemoryWindow, parseRange } from "@/lib/torrent/range";
 import { parseTorrentRequest } from "@/lib/torrent/request";
 
 export async function GET(
@@ -85,30 +85,16 @@ export async function GET(
 		});
 	}
 
-	const { start } = range;
-	let { end, partial } = range;
-
-	if (getRuntimeConfig().config.storage.mode === "memory") {
-		const startByte = file.offset + start;
-		const startPiece = Math.floor(startByte / torrent.pieceLength);
-		const nextPieceStartByte = (startPiece + 1) * torrent.pieceLength;
-		const bytesUntilNextPiece = nextPieceStartByte - startByte;
-		const buffer = Math.max(
-			1,
-			Math.floor(
-				getRuntimeConfig().config.storage.streamMemoryLimit /
-					torrent.pieceLength /
-					2,
-			),
-		);
-		const maxLength = bytesUntilNextPiece + (buffer - 1) * torrent.pieceLength;
-
-		if (end - start >= maxLength) {
-			end = Math.min(start + maxLength - 1, file.length - 1);
-			// Not the whole file any more, even if no range was requested.
-			partial = true;
-		}
-	}
+	const { storage } = getRuntimeConfig().config;
+	const { start, end, partial } =
+		storage.mode === "memory"
+			? capToMemoryWindow(range, {
+					fileOffset: file.offset,
+					fileLength: file.length,
+					pieceLength: torrent.pieceLength,
+					memoryLimit: storage.streamMemoryLimit,
+				})
+			: range;
 
 	if (request.signal.aborted) {
 		return new NextResponse(null, { status: 499 });

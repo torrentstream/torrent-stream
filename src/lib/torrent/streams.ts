@@ -15,6 +15,7 @@ import {
 	seedRecords,
 	updateSeedRecord,
 } from "./persistence";
+import { type RemovalOptions, shouldDestroyStore } from "./removal";
 import { TorrentStreamChunkStore } from "./store";
 
 export interface TorrentData {
@@ -104,23 +105,15 @@ function unregisterTorrent(torrent: Torrent, preserveSeedState: boolean) {
 
 export async function destroyTorrentInternal(
 	torrent: Torrent,
-	options: {
-		deleteFiles?: boolean;
-		preserveSeedState?: boolean;
-		forceDestroyStore?: boolean;
-	} = {},
+	options: RemovalOptions = {},
 ) {
 	const data = torrentData.get(torrent);
 	if (data?.seed) updateSeedRecord(torrent, data.seed);
 	flushSeedRecords(true);
-	const storage = getRuntimeConfig().config.storage;
-	const destroyStore =
-		options.forceDestroyStore ??
-		(storage.mode === "file"
-			? options.preserveSeedState
-				? false
-				: (options.deleteFiles ?? !storage.keepFiles)
-			: true);
+	const destroyStore = shouldDestroyStore(
+		getRuntimeConfig().config.storage,
+		options,
+	);
 	return new Promise<void>((resolve) => {
 		if (torrent.destroyed) {
 			unregisterTorrent(torrent, options.preserveSeedState ?? false);

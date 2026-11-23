@@ -4,6 +4,7 @@ import { getRuntimeConfig } from "@/lib/config/runtime";
 import { logger } from "@/lib/logging/logger";
 import { getTorrentClient } from "./clients";
 import { seedRecords } from "./persistence";
+import { waitForReady, withTimeout } from "./ready";
 import {
 	getTorrentByUri,
 	registerStream,
@@ -19,7 +20,7 @@ export const metadataDeadline = 5 * 60 * 1000;
 
 interface PendingAdd {
 	/** The torrent whose readiness is awaited. */
-	torrent: Torrent;
+	readonly torrent: Torrent;
 	/** Resolves with the registered torrent, or "failed" if it never got ready. */
 	ready: Promise<Torrent | "failed">;
 }
@@ -36,8 +37,8 @@ function getPendingAdd(uri: string) {
 	const pending = pendingAdds.get(uri);
 	if (!pending) return undefined;
 	if (!pending.torrent.destroyed) return pending;
-	// Normally removed by the "close" listener, this only guards against a
-	// torrent that was torn down together with its client.
+	// Normally removed once it settles, this only guards against a torrent
+	// that was torn down together with its client.
 	pendingAdds.delete(uri);
 	return undefined;
 }
@@ -53,43 +54,11 @@ function startAdd(uri: string, provider?: string) {
 		deselect: true,
 	});
 
-	let resolve!: (result: Torrent | "failed") => void;
-	const pending: PendingAdd = {
-		torrent: added,
-		ready: new Promise((resolver) => {
-			resolve = resolver;
-		}),
-	};
-
-	const settle = (result: Torrent | "failed") => {
-		clearTimeout(deadline);
-		pending.torrent.off("ready", onReady);
-		pending.torrent.off("close", onClose);
-		if (pendingAdds.get(uri) === pending) pendingAdds.delete(uri);
-		resolve(result);
-	};
-	const onReady = () => {
-		registerTorrent(pending.torrent, provider, uri);
-		settle(pending.torrent);
-	};
-	const onClose = () => {
-		// WebTorrent destroys a torrent whose info hash is already in the client;
-		// the surviving torrent is then the one to wait for.
-		const { infoHash } = pending.torrent;
-		const duplicate = infoHash
-			? client.torrents.find((torrent) => torrent.infoHash === infoHash)
-			: undefined;
-		if (duplicate) follow(duplicate);
-		else settle("failed");
-	};
-	const follow = (torrent: Torrent) => {
-		pending.torrent = torrent;
-		if (torrent.ready) return onReady();
-		torrent.once("ready", onReady);
-		torrent.once("close", onClose);
-	};
+	const wait = waitForReady(added, (infoHash) =>
+		client.torrents.find((torrent) => torrent.infoHash === infoHash),
+	);
 	const deadline = setTimeout(() => {
-		settle("failed");
+		wait.cancel();
 		// A followed duplicate belongs to whoever added it.
 		if (added.destroyed) return;
 		// The torrent may still be verifying files that are already on disk;
@@ -101,8 +70,18 @@ function startAdd(uri: string, provider?: string) {
 		added.destroy({ destroyStore: !keepsFiles });
 	}, metadataDeadline);
 
+	const pending: PendingAdd = {
+		get torrent() {
+			return wait.current();
+		},
+		ready: wait.ready.then((result) => {
+			clearTimeout(deadline);
+			if (pendingAdds.get(uri) === pending) pendingAdds.delete(uri);
+			if (result !== "failed") registerTorrent(result, provider, uri);
+			return result;
+		}),
+	};
 	pendingAdds.set(uri, pending);
-	follow(added);
 	return pending;
 }
 
@@ -126,13 +105,7 @@ export function getOrAddTorrent(
 	}
 
 	const { ready } = getPendingAdd(uri) ?? startAdd(uri, provider);
-	return new Promise<Torrent | "pending" | "failed">((resolve) => {
-		const timeout = setTimeout(() => resolve("pending"), addTimeout);
-		void ready.then((result) => {
-			clearTimeout(timeout);
-			resolve(result);
-		});
-	});
+	return withTimeout(ready, addTimeout);
 }
 
 export function getReadableStream(

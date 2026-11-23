@@ -44,3 +44,35 @@ export function parseRange(
 	if (start >= length) return "unsatisfiable";
 	return { start, end: Math.min(end, length - 1), partial: true };
 }
+
+export interface MemoryWindow {
+	/** Byte offset of the file within the torrent. */
+	fileOffset: number;
+	fileLength: number;
+	pieceLength: number;
+	/** Memory one stream may use (the storage's `streamMemoryLimit`). */
+	memoryLimit: number;
+}
+
+/**
+ * In memory mode a response may only cover what fits in the stream's share of
+ * memory: the rest of the piece it starts in, plus whole pieces until half the
+ * memory limit is used. A capped range is always partial, even when the client
+ * asked for the whole file.
+ */
+export function capToMemoryWindow(
+	range: ByteRange,
+	{ fileOffset, fileLength, pieceLength, memoryLimit }: MemoryWindow,
+): ByteRange {
+	const startByte = fileOffset + range.start;
+	const bytesUntilNextPiece = pieceLength - (startByte % pieceLength);
+	const pieces = Math.max(1, Math.floor(memoryLimit / pieceLength / 2));
+	const maxLength = bytesUntilNextPiece + (pieces - 1) * pieceLength;
+
+	if (range.end - range.start < maxLength) return range;
+	return {
+		start: range.start,
+		end: Math.min(range.start + maxLength - 1, fileLength - 1),
+		partial: true,
+	};
+}

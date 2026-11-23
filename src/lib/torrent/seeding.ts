@@ -20,6 +20,11 @@ import {
 	seedRecords,
 } from "./persistence";
 import {
+	decideSeedRemoval,
+	normalizeRequiredNames,
+	seedRequirementCheckInterval,
+} from "./seed-requirements";
+import {
 	destroyTorrentInternal,
 	getTorrentData,
 	isSeedingEnabled,
@@ -31,38 +36,12 @@ declare global {
 	var seedRequirementInterval: NodeJS.Timeout | undefined;
 }
 
-const seedRequirementCheckInterval = 60 * 60 * 1000;
-const seedRequirementGracePeriod = 8 * 60 * 60 * 1000;
-// Checks also run on every configuration change, so the confirming check must
-// be a later scheduled one rather than simply the next one.
-const seedRequirementConfirmationDelay = seedRequirementCheckInterval / 2;
-
-// Tracker pages truncate long titles, so a name that is a prefix of the other
-// counts as the same torrent once it is long enough to be distinctive.
-const minimumPrefixMatchLength = 12;
-
-function normalizeTorrentName(name: string) {
-	return name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-}
-
-function isSameTorrentName(a: string, b: string) {
-	if (a === b) return true;
-	const [shorter, longer] = a.length < b.length ? [a, b] : [b, a];
-	return (
-		shorter.length >= minimumPrefixMatchLength && longer.startsWith(shorter)
-	);
-}
-
 async function checkProviderSeedRequirements(provider: TorrentSearchProvider) {
 	let requiredNames: string[];
 	try {
-		requiredNames = [
-			...new Set(
-				(await provider.getSeedRequirements())
-					.map(normalizeTorrentName)
-					.filter((name) => name.length > 0),
-			),
-		];
+		requiredNames = normalizeRequiredNames(
+			await provider.getSeedRequirements(),
+		);
 	} catch (error) {
 		logger.error(error);
 		recordSeedCheckFailure(provider.id, error);
@@ -81,21 +60,18 @@ async function checkProviderSeedRequirements(provider: TorrentSearchProvider) {
 		const seedRecord = seedRecords[torrent.infoHash];
 		if (data?.provider !== provider.id || !data.seed || !seedRecord) continue;
 
-		const name = normalizeTorrentName(torrent.name);
-		const unrequired =
-			now - seedRecord.addedAt >= seedRequirementGracePeriod &&
-			data.streams.size === 0 &&
-			!requiredNames.some((required) => isSameTorrentName(required, name));
-		if (!unrequired) {
-			data.unrequiredSince = undefined;
-			continue;
-		}
-		// Removal needs a second check to confirm that the torrent is still not
-		// listed, in case the tracker served an incomplete page.
-		data.unrequiredSince ??= now;
-		if (now - data.unrequiredSince >= seedRequirementConfirmationDelay) {
-			removable.push(torrent);
-		}
+		const { remove, unrequiredSince } = decideSeedRemoval(
+			{
+				name: torrent.name,
+				addedAt: seedRecord.addedAt,
+				streaming: data.streams.size > 0,
+				unrequiredSince: data.unrequiredSince,
+			},
+			requiredNames,
+			now,
+		);
+		data.unrequiredSince = unrequiredSince;
+		if (remove) removable.push(torrent);
 	}
 
 	await Promise.all(
